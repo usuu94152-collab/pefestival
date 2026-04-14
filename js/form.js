@@ -20,6 +20,8 @@
   const formData = {
     grade: "",
     class: "",
+    writerName: "",
+    teacherName: "",
     events: [], // [{ name, participants:[], skipped:false }, ...]
   };
 
@@ -351,9 +353,16 @@
       }
     }
 
-    // 확인 단계: 항상 유효
+    // 확인 단계: 작성자 이름 필수
     if (currentStep === CONFIRM_STEP()) {
-      renderSummary();
+      const writerInput = document.getElementById("sign-writer-name");
+      const writerError = document.getElementById("sign-writer-error");
+      if (writerInput && !writerInput.value.trim()) {
+        writerError.style.display = "";
+        writerInput.focus();
+        return false;
+      }
+      if (writerError) writerError.style.display = "none";
     }
 
     return true;
@@ -415,6 +424,38 @@
       }
       tbody.appendChild(tr);
     });
+
+    // 서명란
+    const signSection = document.createElement("div");
+    signSection.style.cssText = "margin-top:1.75rem;";
+    signSection.innerHTML = `
+      <p style="font-size:0.82rem; color:var(--color-muted); margin-bottom:0.75rem; font-weight:600; letter-spacing:0.03em;">서명</p>
+      <table class="summary-table" style="table-layout:fixed;">
+        <tbody>
+          <tr>
+            <th style="width:7rem;">작성자 이름 <span class="required">*</span></th>
+            <td><input type="text" class="sign-input" id="sign-writer-name" placeholder="이름 입력" value="${escHtml(formData.writerName)}" maxlength="20" /></td>
+            <th style="width:4rem;">서명</th>
+            <td><div class="sign-box" id="sign-writer-sign"></div></td>
+          </tr>
+          <tr>
+            <th>담임교사 이름</th>
+            <td><input type="text" class="sign-input" id="sign-teacher-name" placeholder="이름 입력" value="${escHtml(formData.teacherName)}" maxlength="20" /></td>
+            <th>서명</th>
+            <td><div class="sign-box" id="sign-teacher-sign"></div></td>
+          </tr>
+        </tbody>
+      </table>
+      <p id="sign-writer-error" style="color:var(--color-danger); font-size:0.82rem; margin-top:0.4rem; display:none;">작성자 이름을 입력해주세요.</p>
+    `;
+    container.appendChild(signSection);
+
+    document.getElementById("sign-writer-name").addEventListener("input", e => {
+      formData.writerName = e.target.value;
+    });
+    document.getElementById("sign-teacher-name").addEventListener("input", e => {
+      formData.teacherName = e.target.value;
+    });
   }
 
   // ── 제출 ────────────────────────────────────────────────
@@ -424,8 +465,10 @@
     els.submitError.classList.add("hidden");
 
     const payload = {
-      grade:  formData.grade,
-      class:  formData.class,
+      grade:       formData.grade,
+      class:       formData.class,
+      writerName:  formData.writerName,
+      teacherName: formData.teacherName,
       events: formData.events.map(ev => ({
         name:         ev.name,
         participants: ev.participants.filter(p => p.trim() !== ""),
@@ -485,11 +528,13 @@
   // ── 임시저장 ────────────────────────────────────────────
   function saveDraft() {
     const draft = {
-      step:      currentStep,
-      grade:     formData.grade,
-      class:     formData.class,
-      events:    JSON.parse(JSON.stringify(formData.events)),
-      savedAt:   Date.now(),
+      step:        currentStep,
+      grade:       formData.grade,
+      class:       formData.class,
+      writerName:  formData.writerName,
+      teacherName: formData.teacherName,
+      events:      JSON.parse(JSON.stringify(formData.events)),
+      savedAt:     Date.now(),
     };
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -547,6 +592,10 @@
           }
         });
       }
+
+      // 작성자/담임교사 복원
+      if (draft.writerName)  formData.writerName  = draft.writerName;
+      if (draft.teacherName) formData.teacherName = draft.teacherName;
 
       // 동의 체크박스 자동 체크
       document.getElementById("agreement-checkbox").checked = true;

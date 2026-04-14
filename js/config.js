@@ -5,7 +5,7 @@
 
 const CONFIG = {
   // ── 학교 / 행사 정보 ──────────────────────────────────────
-  schoolName: "○○중학교",
+  schoolName: "대진고등학교",
   eventTitle: "2026 체육대회",
   eventDate: "2026년 5월 15일",
   eventLocation: "학교 운동장",
