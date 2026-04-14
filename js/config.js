@@ -16,7 +16,7 @@ const CONFIG = {
 
   // ── 관리자 비밀번호 ───────────────────────────────────────
   // Apps Script의 ADMIN_PASSWORD와 반드시 동일하게 설정하세요
-  adminPassword: "admin1234",
+  adminPassword: "2026djpe",
 
   // ── 학년 / 반 목록 ────────────────────────────────────────
   grades: ["1학년", "2학년", "3학년"],
