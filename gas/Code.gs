@@ -126,27 +126,33 @@ function getRosterData(grade, className) {
   const sheet = ss.getSheetByName(ROSTER_SHEET_NAME);
 
   if (!sheet) {
-    // 명렬 시트가 없으면 빈 배열 반환 (수동 입력 모드로 전환)
     return buildResponse({ success: true, students: [] });
   }
+
+  // 폼은 "1학년"/"1반" 형식으로 보내므로 숫자만 추출해서 비교
+  const gradeNum = String(grade).replace(/학년$/, "").trim();
+  const classNum = String(className).replace(/반$/, "").trim();
 
   const rows     = sheet.getDataRange().getValues();
   const students = [];
 
-  // 1행은 헤더이므로 2행부터
   for (let i = 1; i < rows.length; i++) {
     const rowGrade = String(rows[i][0]).trim();
     const rowClass = String(rows[i][1]).trim();
-    if (rowGrade === grade && rowClass === className) {
+    if (rowGrade === gradeNum && rowClass === classNum) {
+      // 성별 정규화: 남자→남, 여자→여
+      const rawGender = String(rows[i][4] || "").trim();
+      const gender = rawGender === "남자" ? "남"
+                   : rawGender === "여자" ? "여"
+                   : rawGender;
       students.push({
         num:    rows[i][2] || i,
         name:   String(rows[i][3]).trim(),
-        gender: String(rows[i][4] || "").trim()  // 남 / 여
+        gender: gender
       });
     }
   }
 
-  // 번호 순 정렬
   students.sort((a, b) => Number(a.num) - Number(b.num));
 
   return buildResponse({ success: true, students: students });
