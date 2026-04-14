@@ -248,6 +248,9 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
+    // 확인 페이지 진입 시 요약 렌더링
+    if (currentStep === CONFIRM_STEP()) renderSummary();
+
     updateNavUI();
   }
 
