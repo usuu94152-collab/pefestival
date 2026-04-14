@@ -461,16 +461,31 @@
       }
     }
 
-    // 확인 단계: 작성자 이름 필수
+    // 확인 단계: 작성자·담임교사 이름 필수
     if (currentStep === CONFIRM_STEP()) {
-      const writerInput = document.getElementById("sign-writer-name");
-      const writerError = document.getElementById("sign-writer-error");
+      const writerInput  = document.getElementById("sign-writer-name");
+      const writerError  = document.getElementById("sign-writer-error");
+      const teacherInput = document.getElementById("sign-teacher-name");
+      const teacherError = document.getElementById("sign-teacher-error");
+      let ok = true;
+
       if (writerInput && !writerInput.value.trim()) {
-        writerError.style.display = "";
-        writerInput.focus();
-        return false;
+        if (writerError) writerError.style.display = "";
+        if (ok) writerInput.focus();
+        ok = false;
+      } else {
+        if (writerError) writerError.style.display = "none";
       }
-      if (writerError) writerError.style.display = "none";
+
+      if (teacherInput && !teacherInput.value.trim()) {
+        if (teacherError) teacherError.style.display = "";
+        if (ok) teacherInput.focus();
+        ok = false;
+      } else {
+        if (teacherError) teacherError.style.display = "none";
+      }
+
+      if (!ok) return false;
     }
 
     return true;
@@ -547,7 +562,7 @@
             <td><div class="sign-box" id="sign-writer-sign"></div></td>
           </tr>
           <tr>
-            <th>담임교사 이름</th>
+            <th>담임교사 이름 <span class="required">*</span></th>
             <td><input type="text" class="sign-input" id="sign-teacher-name" placeholder="이름 입력" value="${escHtml(formData.teacherName)}" maxlength="20" /></td>
             <th>서명</th>
             <td><div class="sign-box" id="sign-teacher-sign"></div></td>
@@ -555,6 +570,7 @@
         </tbody>
       </table>
       <p id="sign-writer-error" style="color:var(--color-danger); font-size:0.82rem; margin-top:0.4rem; display:none;">작성자 이름을 입력해주세요.</p>
+      <p id="sign-teacher-error" style="color:var(--color-danger); font-size:0.82rem; margin-top:0.2rem; display:none;">담임교사 이름을 입력해주세요.</p>
     `;
     container.appendChild(signSection);
 
@@ -564,6 +580,113 @@
     document.getElementById("sign-teacher-name").addEventListener("input", e => {
       formData.teacherName = e.target.value;
     });
+
+    // PDF 저장 버튼
+    const printBtn = document.createElement("div");
+    printBtn.style.cssText = "margin-top:1.25rem; text-align:center;";
+    printBtn.innerHTML = `
+      <button type="button" class="btn btn-outline" id="btn-print-doc">
+        참가신청서 저장 (PDF)
+      </button>
+      <p style="font-size:0.78rem; color:var(--color-muted); margin-top:0.4rem;">
+        새 창에서 인쇄 → PDF로 저장 선택
+      </p>
+    `;
+    container.appendChild(printBtn);
+    document.getElementById("btn-print-doc").addEventListener("click", printDocument);
+  }
+
+  // ── 참가신청서 PDF 출력 ──────────────────────────────────
+  function printDocument() {
+    const eventsRows = formData.events.map(ev => {
+      const filled = ev.participants.filter(p => p.trim() !== "");
+      const cell = (ev.skipped || filled.length === 0)
+        ? `<span style="color:#999;font-style:italic;">참가 없음</span>`
+        : filled.map(p => escHtml(p)).join(", ");
+      return `<tr><td>${escHtml(ev.name)}</td><td>${cell}</td></tr>`;
+    }).join("");
+
+    const today = new Date().toLocaleDateString("ko-KR",
+      { year: "numeric", month: "long", day: "numeric" });
+
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>${escHtml(CONFIG.schoolName)} ${escHtml(CONFIG.eventTitle)} 참가신청서</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Malgun Gothic', 'AppleGothic', 'Noto Sans KR', sans-serif;
+    font-size: 11pt; color: #000; background: #fff;
+    padding: 15mm 20mm;
+  }
+  h1 { font-size: 20pt; font-weight: bold; text-align: center; margin-bottom: 4px; }
+  .doc-subtitle { text-align: center; font-size: 12pt; color: #444; margin-bottom: 4px; }
+  .doc-date { text-align: right; font-size: 10pt; color: #666; margin-bottom: 18px; }
+  .section-label {
+    font-size: 10pt; font-weight: bold; background: #2A6AE8;
+    color: #fff; padding: 4px 10px; margin-bottom: 0;
+  }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th, td { border: 1px solid #aaa; padding: 5px 9px; font-size: 10pt; vertical-align: middle; }
+  th { background: #f2f4f8; font-weight: bold; text-align: center; }
+  .info-table th { width: 22%; }
+  .events-table th:first-child { width: 32%; }
+  .sign-table th { width: 22%; }
+  .sign-box { height: 26px; }
+  .print-btn {
+    display: block; margin: 24px auto 0; padding: 8px 28px;
+    font-size: 11pt; font-family: inherit; cursor: pointer;
+    background: #2A6AE8; color: #fff; border: none; border-radius: 6px;
+  }
+  @media print { .print-btn { display: none; } }
+</style>
+</head>
+<body>
+  <h1>${escHtml(CONFIG.eventTitle)} 참가신청서</h1>
+  <p class="doc-subtitle">${escHtml(CONFIG.schoolName)}</p>
+  <p class="doc-date">작성일: ${today}</p>
+
+  <p class="section-label">학급 정보</p>
+  <table class="info-table">
+    <tr>
+      <th>학년</th><td>${escHtml(formData.grade)}</td>
+      <th>반</th><td>${escHtml(formData.class)}</td>
+    </tr>
+  </table>
+
+  <p class="section-label">종목별 참가 현황</p>
+  <table class="events-table">
+    <thead><tr><th>종목</th><th>참가 학생</th></tr></thead>
+    <tbody>${eventsRows}</tbody>
+  </table>
+
+  <p class="section-label">서명</p>
+  <table class="sign-table">
+    <tr>
+      <th>작성자</th>
+      <td>${escHtml(formData.writerName)}</td>
+      <th>서명</th>
+      <td class="sign-box"></td>
+    </tr>
+    <tr>
+      <th>담임교사</th>
+      <td>${escHtml(formData.teacherName)}</td>
+      <th>서명</th>
+      <td class="sign-box"></td>
+    </tr>
+  </table>
+
+  <button class="print-btn" onclick="window.print()">🖨️ 인쇄 / PDF로 저장</button>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
   }
 
   // ── 제출 ────────────────────────────────────────────────
