@@ -12,7 +12,7 @@ const CONFIG = {
 
   // ── Google Apps Script 배포 URL ───────────────────────────
   // Apps Script 배포 후 발급되는 URL을 붙여넣으세요
-  scriptUrl: "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec",
+  scriptUrl: "https://script.google.com/macros/s/AKfycbyKrGG_w-yuWzEwIVb9II-pd6ocZ9JFnW1EQ9mwheNf-R-6q-9ROisA07ND32ngM-b5/exec",
 
   // ── 관리자 비밀번호 ───────────────────────────────────────
   // Apps Script의 ADMIN_PASSWORD와 반드시 동일하게 설정하세요
