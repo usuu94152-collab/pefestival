@@ -139,8 +139,9 @@ function getRosterData(grade, className) {
     const rowClass = String(rows[i][1]).trim();
     if (rowGrade === grade && rowClass === className) {
       students.push({
-        num:  rows[i][2] || i,
-        name: String(rows[i][3]).trim()
+        num:    rows[i][2] || i,
+        name:   String(rows[i][3]).trim(),
+        gender: String(rows[i][4] || "").trim()  // 남 / 여
       });
     }
   }

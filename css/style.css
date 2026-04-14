@@ -714,6 +714,19 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
   min-width: 1.1rem;
   text-align: right;
 }
+.chip-gender {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.32rem;
+  border-radius: 3px;
+  line-height: 1;
+}
+.chip-gender.male   { background: #DBEAFE; color: #1D4ED8; }
+.chip-gender.female { background: #FCE7F3; color: #9D174D; }
+.student-chip.selected .chip-gender {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
 .chip-count-msg {
   font-size: 0.83rem;
   color: var(--color-muted);

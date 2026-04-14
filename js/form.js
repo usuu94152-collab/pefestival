@@ -176,9 +176,13 @@
         + (isSelected  ? " selected"  : "")
         + (isDisabled  ? " is-disabled" : "");
       chip.disabled  = isDisabled;
-      chip.innerHTML = student.num
-        ? `<span class="chip-num">${escHtml(String(student.num))}</span>${escHtml(student.name)}`
-        : escHtml(student.name);
+      const genderClass = student.gender === "남" ? "male" : student.gender === "여" ? "female" : "";
+      const genderBadge = student.gender
+        ? `<span class="chip-gender ${genderClass}">${escHtml(student.gender)}</span>`
+        : "";
+      chip.innerHTML = (student.num ? `<span class="chip-num">${escHtml(String(student.num))}</span>` : "")
+        + escHtml(student.name)
+        + genderBadge;
 
       chip.addEventListener("click", () => {
         if (selected.has(student.name)) {
