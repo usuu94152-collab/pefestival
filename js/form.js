@@ -22,6 +22,7 @@
     class: "",
     writerName: "",
     teacherName: "",
+    roster: [], // [{ num, name }, ...] — 학급 명렬 (GAS에서 fetch)
     events: [], // [{ name, participants:[], skipped:false }, ...]
   };
 
@@ -141,13 +142,79 @@
   }
 
   function renderParticipants(idx) {
-    const event = CONFIG.events[idx];
-    const data  = formData.events[idx];
-    const list  = document.getElementById(`plist-${idx}`);
+    if (formData.roster.length > 0) {
+      renderChipPicker(idx);
+    } else {
+      renderTextInputs(idx);
+    }
+  }
+
+  // 명렬이 있을 때: 칩(chip) 선택 UI
+  function renderChipPicker(idx) {
+    const event  = CONFIG.events[idx];
+    const data   = formData.events[idx];
+    const list   = document.getElementById(`plist-${idx}`);
     const addBtn = document.getElementById(`btn-add-${idx}`);
     const maxMsg = document.getElementById(`max-msg-${idx}`);
 
+    if (addBtn) addBtn.style.display = "none";
+
+    const max      = event.maxParticipants;
+    const selected = new Set(data.participants.filter(p => p.trim() !== ""));
+
+    list.className = "chips-grid";
     list.innerHTML = "";
+
+    formData.roster.forEach(student => {
+      const isSelected = selected.has(student.name);
+      const atMax      = max > 0 && selected.size >= max;
+      const isDisabled = data.skipped || (!isSelected && atMax);
+
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "student-chip"
+        + (isSelected  ? " selected"  : "")
+        + (isDisabled  ? " is-disabled" : "");
+      chip.disabled  = isDisabled;
+      chip.innerHTML = student.num
+        ? `<span class="chip-num">${escHtml(String(student.num))}</span>${escHtml(student.name)}`
+        : escHtml(student.name);
+
+      chip.addEventListener("click", () => {
+        if (selected.has(student.name)) {
+          selected.delete(student.name);
+        } else {
+          if (max > 0 && selected.size >= max) return;
+          selected.add(student.name);
+        }
+        data.participants = Array.from(selected);
+        renderChipPicker(idx);
+      });
+
+      list.appendChild(chip);
+    });
+
+    // 선택 인원 표시
+    const countText = max > 0
+      ? `${selected.size} / ${max}명 선택`
+      : `${selected.size}명 선택됨`;
+    maxMsg.textContent = countText;
+    maxMsg.classList.remove("hidden");
+    maxMsg.className = "chip-count-msg" + (max > 0 && selected.size >= max ? " at-max" : "");
+  }
+
+  // 명렬이 없을 때: 기존 텍스트 입력 UI
+  function renderTextInputs(idx) {
+    const event  = CONFIG.events[idx];
+    const data   = formData.events[idx];
+    const list   = document.getElementById(`plist-${idx}`);
+    const addBtn = document.getElementById(`btn-add-${idx}`);
+    const maxMsg = document.getElementById(`max-msg-${idx}`);
+
+    if (addBtn) addBtn.style.display = "";
+    list.className = "participants-list";
+    list.innerHTML = "";
+
     data.participants.forEach((name, pIdx) => {
       const item = document.createElement("div");
       item.className = "participant-item";
@@ -162,7 +229,6 @@
       `;
       list.appendChild(item);
 
-      // 입력 이벤트
       item.querySelector("input").addEventListener("input", e => {
         formData.events[idx].participants[pIdx] = e.target.value;
       });
@@ -177,10 +243,10 @@
       });
     });
 
-    // 최대 인원 체크
-    const max = event.maxParticipants;
+    const max  = event.maxParticipants;
     const atMax = max > 0 && data.participants.length >= max;
     addBtn.disabled = atMax || data.skipped;
+    maxMsg.className = "max-reached-msg";
     maxMsg.classList.toggle("hidden", !atMax);
   }
 
@@ -215,7 +281,7 @@
   }
 
   // ── 스텝 네비게이션 ─────────────────────────────────────
-  function handleNext() {
+  async function handleNext() {
     if (!validateCurrentStep()) return;
 
     // 확인 단계에서 제출
@@ -227,7 +293,36 @@
     // 현재 데이터 자동저장
     saveDraft();
 
+    // 학급 정보 입력 후 → 명렬 fetch
+    if (currentStep === CLASS_STEP) {
+      await fetchRoster();
+    }
+
     goToStep(currentStep + 1);
+  }
+
+  async function fetchRoster() {
+    if (!CONFIG.scriptUrl || CONFIG.scriptUrl.includes("YOUR_")) return;
+
+    els.btnNext.disabled = true;
+    els.btnNext.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const url = CONFIG.scriptUrl
+        + "?action=getRoster"
+        + "&grade=" + encodeURIComponent(formData.grade)
+        + "&class=" + encodeURIComponent(formData.class);
+      const res  = await fetch(url);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.students)) {
+        formData.roster = json.students;
+      }
+    } catch (e) {
+      formData.roster = [];
+    } finally {
+      els.btnNext.disabled = false;
+      els.btnNext.textContent = "다음";
+    }
   }
 
   function handlePrev() {
@@ -246,6 +341,12 @@
     if (newPanel) {
       newPanel.classList.remove("hidden");
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // 이벤트 스텝 진입 시 참가학생 렌더링 (명렬 반영)
+    const arrivedEventIdx = currentStep - 2;
+    if (arrivedEventIdx >= 0 && arrivedEventIdx < CONFIG.events.length) {
+      renderParticipants(arrivedEventIdx);
     }
 
     // 확인 페이지 진입 시 요약 렌더링
@@ -599,6 +700,16 @@
       // 작성자/담임교사 복원
       if (draft.writerName)  formData.writerName  = draft.writerName;
       if (draft.teacherName) formData.teacherName = draft.teacherName;
+
+      // 명렬 재fetch (이벤트 스텝에 있을 경우 칩 재렌더링)
+      if (formData.grade && formData.class) {
+        fetchRoster().then(() => {
+          const eventIdx = currentStep - 2;
+          if (eventIdx >= 0 && eventIdx < CONFIG.events.length) {
+            renderParticipants(eventIdx);
+          }
+        });
+      }
 
       // 동의 체크박스 자동 체크
       document.getElementById("agreement-checkbox").checked = true;

@@ -9,17 +9,23 @@
 //    - 다음 사용자로 실행: 나 (Me)
 //    - 액세스 권한: 모든 사용자 (Anyone)
 // 5. 배포 URL을 js/config.js의 scriptUrl에 붙여넣기
+//
+// [시트 구성]
+// - "신청목록" 시트: 참가신청 저장 (자동 생성)
+// - "명렬" 시트: 학급별 학생 명단 (직접 작성)
+//   컬럼: A=학년, B=반, C=번호, D=이름
+//   예시: 1학년 | 1반 | 1 | 김철수
 // ============================================================
 
-const SHEET_NAME = "신청목록";
-const ADMIN_PASSWORD = "admin1234"; // ← 반드시 변경하세요
+const SHEET_NAME        = "신청목록";
+const ROSTER_SHEET_NAME = "명렬";
+const ADMIN_PASSWORD    = "admin1234"; // ← 반드시 변경하세요
 
 // ── POST 핸들러: 참가신청 저장 ────────────────────────────
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
 
-    // 필수값 검증
     if (!data.grade || !data.class) {
       return buildResponse({ success: false, message: "학년과 반을 입력해주세요." });
     }
@@ -30,7 +36,7 @@ function doPost(e) {
     const sheet = getOrCreateSheet();
     const timestamp = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
-    // 중복 제출 확인 (같은 학년+반)
+    // 중복 제출 확인
     const existing = sheet.getDataRange().getValues();
     for (let i = 1; i < existing.length; i++) {
       if (existing[i][1] === data.grade && existing[i][2] === data.class) {
@@ -54,7 +60,9 @@ function doPost(e) {
         data.class,
         eventEntry.name,
         isSkipped ? "참가 없음" : participants,
-        isSkipped ? "Y" : "N"
+        isSkipped ? "Y" : "N",
+        data.writerName  || "",
+        data.teacherName || ""
       ]);
     });
 
@@ -65,29 +73,36 @@ function doPost(e) {
   }
 }
 
-// ── GET 핸들러: 관리자 데이터 조회 ───────────────────────
+// ── GET 핸들러 ────────────────────────────────────────────
 function doGet(e) {
   try {
+    // 명렬 조회
+    if (e.parameter.action === "getRoster") {
+      return getRosterData(e.parameter.grade, e.parameter.class);
+    }
+
+    // 관리자 데이터 조회
     if (e.parameter.action === "getData") {
       if (e.parameter.password !== ADMIN_PASSWORD) {
         return buildResponse({ success: false, message: "비밀번호가 올바르지 않습니다." });
       }
 
       const sheet = getOrCreateSheet();
-      const rows = sheet.getDataRange().getValues();
+      const rows  = sheet.getDataRange().getValues();
 
       if (rows.length <= 1) {
         return buildResponse({ success: true, data: [], total: 0 });
       }
 
-      // rows[0]은 헤더
       const records = rows.slice(1).map(row => ({
-        timestamp:    row[0],
-        grade:        row[1],
-        class:        row[2],
-        event:        row[3],
+        timestamp:   row[0],
+        grade:       row[1],
+        class:       row[2],
+        event:       row[3],
         participants: row[4],
-        skipped:      row[5] === "Y"
+        skipped:     row[5] === "Y",
+        writerName:  row[6] || "",
+        teacherName: row[7] || ""
       }));
 
       return buildResponse({ success: true, data: records, total: records.length });
@@ -101,31 +116,66 @@ function doGet(e) {
   }
 }
 
-// ── 시트 초기화 ───────────────────────────────────────────
+// ── 명렬 조회 ─────────────────────────────────────────────
+function getRosterData(grade, className) {
+  if (!grade || !className) {
+    return buildResponse({ success: false, message: "학년과 반을 입력해주세요." });
+  }
+
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(ROSTER_SHEET_NAME);
+
+  if (!sheet) {
+    // 명렬 시트가 없으면 빈 배열 반환 (수동 입력 모드로 전환)
+    return buildResponse({ success: true, students: [] });
+  }
+
+  const rows     = sheet.getDataRange().getValues();
+  const students = [];
+
+  // 1행은 헤더이므로 2행부터
+  for (let i = 1; i < rows.length; i++) {
+    const rowGrade = String(rows[i][0]).trim();
+    const rowClass = String(rows[i][1]).trim();
+    if (rowGrade === grade && rowClass === className) {
+      students.push({
+        num:  rows[i][2] || i,
+        name: String(rows[i][3]).trim()
+      });
+    }
+  }
+
+  // 번호 순 정렬
+  students.sort((a, b) => Number(a.num) - Number(b.num));
+
+  return buildResponse({ success: true, students: students });
+}
+
+// ── 신청목록 시트 초기화 ─────────────────────────────────
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
 
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    const headers = ["등록일시", "학년", "반", "종목", "참가학생", "건너뜀"];
+    const headers = ["등록일시", "학년", "반", "종목", "참가학생", "건너뜀", "작성자", "담임교사"];
     sheet.appendRow(headers);
     sheet.setFrozenRows(1);
 
-    // 헤더 스타일
     const headerRange = sheet.getRange(1, 1, 1, headers.length);
     headerRange
       .setBackground("#2A6AE8")
       .setFontColor("#FFFFFF")
       .setFontWeight("bold");
 
-    // 컬럼 너비 설정
-    sheet.setColumnWidth(1, 160); // 등록일시
-    sheet.setColumnWidth(2, 70);  // 학년
-    sheet.setColumnWidth(3, 50);  // 반
-    sheet.setColumnWidth(4, 120); // 종목
-    sheet.setColumnWidth(5, 300); // 참가학생
-    sheet.setColumnWidth(6, 70);  // 건너뜀
+    sheet.setColumnWidth(1, 160);
+    sheet.setColumnWidth(2, 70);
+    sheet.setColumnWidth(3, 50);
+    sheet.setColumnWidth(4, 120);
+    sheet.setColumnWidth(5, 300);
+    sheet.setColumnWidth(6, 70);
+    sheet.setColumnWidth(7, 90);
+    sheet.setColumnWidth(8, 90);
   }
 
   return sheet;
