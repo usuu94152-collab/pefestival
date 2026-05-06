@@ -54,17 +54,37 @@
 
   function populateMetaInfo() {
     document.title = CONFIG.eventTitle + " 참가신청";
-    document.getElementById("header-badge").textContent = CONFIG.eventTitle;
-    document.getElementById("header-title").textContent = "체육대회 참가신청서";
+    document.getElementById("header-badge").textContent = CONFIG.eventBadge || CONFIG.eventTitle;
+    document.getElementById("header-title").textContent = CONFIG.eventTitle + " 참가신청서";
     document.getElementById("header-subtitle").textContent = CONFIG.schoolName;
     document.getElementById("intro-event-title").textContent = CONFIG.eventTitle;
     document.getElementById("info-date").textContent = CONFIG.eventDate;
     document.getElementById("info-location").textContent = CONFIG.eventLocation;
-    document.getElementById("info-events").textContent =
-      CONFIG.events.map(e => e.name).join(", ");
+    document.getElementById("info-events").innerHTML = renderEventGroups();
     document.getElementById("intro-text").innerHTML = CONFIG.introText;
     document.getElementById("site-footer").textContent =
       CONFIG.schoolName + " " + CONFIG.eventTitle;
+  }
+
+  function renderEventGroups() {
+    const groups = [];
+
+    CONFIG.events.forEach(event => {
+      const category = event.category || event.description || "기타";
+      let group = groups.find(item => item.category === category);
+      if (!group) {
+        group = { category, names: [] };
+        groups.push(group);
+      }
+      group.names.push(event.name);
+    });
+
+    return groups.map(group => `
+      <div class="event-group">
+        <strong>${escHtml(group.category)}</strong>
+        <span>${group.names.map(name => escHtml(name)).join(", ")}</span>
+      </div>
+    `).join("");
   }
 
   function populateSelects() {
@@ -98,14 +118,33 @@
     const maxLabel = event.maxParticipants > 0
       ? `최대 ${event.maxParticipants}명`
       : "인원 제한 없음";
-    const desc = event.description ? `— ${event.description}` : "";
+    const category = event.category || event.description || "";
+    const personnel = event.personnel || maxLabel;
+    const targetRow = Array.isArray(event.allowedGrades) && event.allowedGrades.length > 0
+      ? `<tr><th>참가 대상</th><td>${escHtml(event.allowedGrades.join(", "))}</td></tr>`
+      : "";
+    const genderLimitRow = event.genderLimits
+      ? `<tr><th>성별 제한</th><td>${escHtml(formatGenderLimits(event))}</td></tr>`
+      : "";
+    const methodRow = event.method
+      ? `<tr><th>경기 방법</th><td>${escHtml(event.method)}</td></tr>`
+      : "";
 
     panel.innerHTML = `
       <div class="card">
         <div class="card-label">STEP ${String(stepNum).padStart(2, "0")}</div>
         <h2 class="card-title">${escHtml(event.name)}</h2>
         <div class="card-title-underline"></div>
-        <p class="card-subtitle">${escHtml(maxLabel)} ${escHtml(desc)}</p>
+        <table class="event-method-table">
+          <tbody>
+            <tr><th>구분</th><td>${escHtml(category)}</td></tr>
+            <tr><th>종목</th><td>${escHtml(event.name)}</td></tr>
+            <tr><th>인원</th><td>${escHtml(personnel)}</td></tr>
+            ${targetRow}
+            ${genderLimitRow}
+            ${methodRow}
+          </tbody>
+        </table>
 
         <div class="participants-list" id="plist-${idx}"></div>
 
@@ -142,11 +181,560 @@
   }
 
   function renderParticipants(idx) {
-    if (formData.roster.length > 0) {
+    if (!isEventAllowed(CONFIG.events[idx])) {
+      renderRestrictedEvent(idx);
+    } else if (isWaveRelayEvent(CONFIG.events[idx]) && formData.roster.length > 0) {
+      restoreRestrictedEvent(idx);
+      renderWaveRelayPicker(idx);
+    } else if (isGroupedEvent(CONFIG.events[idx]) && formData.roster.length > 0) {
+      restoreRestrictedEvent(idx);
+      renderGroupedChipPicker(idx);
+    } else if (formData.roster.length > 0) {
+      restoreRestrictedEvent(idx);
       renderChipPicker(idx);
     } else {
+      restoreRestrictedEvent(idx);
       renderTextInputs(idx);
     }
+  }
+
+  function isEventAllowed(event) {
+    return !Array.isArray(event.allowedGrades)
+      || event.allowedGrades.length === 0
+      || event.allowedGrades.includes(formData.grade);
+  }
+
+  function isWaveRelayEvent(event) {
+    return !!event.waveRelay;
+  }
+
+  function formatGenderLimits(event) {
+    return Object.entries(event.genderLimits || {})
+      .map(([gender, limit]) => `${gender} 최대 ${limit}명`)
+      .join(", ");
+  }
+
+  function getGroupConfig(event) {
+    if (event.groupByGrade && event.groupByGrade[formData.grade]) {
+      return event.groupByGrade[formData.grade];
+    }
+    if (Number(event.groupCount) > 0 && Number(event.groupSize) > 0) {
+      return {
+        groupCount: event.groupCount,
+        groupSize: event.groupSize,
+      };
+    }
+    return null;
+  }
+
+  function isGroupedEvent(event) {
+    return getGroupConfig(event) !== null;
+  }
+
+  function renderRestrictedEvent(idx) {
+    const event = CONFIG.events[idx];
+    const data = formData.events[idx];
+    const list = document.getElementById(`plist-${idx}`);
+    const addBtn = document.getElementById(`btn-add-${idx}`);
+    const maxMsg = document.getElementById(`max-msg-${idx}`);
+    const skipCheck = document.getElementById(`skip-check-${idx}`);
+    const skipLabel = document.getElementById(`skip-label-${idx}`);
+    const allowedText = event.allowedGrades.join(", ");
+    const currentClass = [formData.grade, formData.class].filter(Boolean).join(" ");
+
+    data.participants = [""];
+    data.skipped = true;
+    data.restrictedSkipped = true;
+
+    if (addBtn) addBtn.style.display = "none";
+    if (maxMsg) maxMsg.classList.add("hidden");
+    if (skipCheck) {
+      skipCheck.checked = true;
+      skipCheck.disabled = true;
+    }
+    if (skipLabel) skipLabel.classList.add("is-skipped");
+
+    list.className = "event-restriction";
+    list.innerHTML = `
+      <strong>${escHtml(allowedText)} 전용 종목입니다.</strong>
+      <span>${escHtml(currentClass || "현재 선택한 학급")}은(는) ${escHtml(event.name)} 참가 대상이 아닙니다.</span>
+    `;
+  }
+
+  function restoreRestrictedEvent(idx) {
+    const data = formData.events[idx];
+    const skipCheck = document.getElementById(`skip-check-${idx}`);
+    const skipLabel = document.getElementById(`skip-label-${idx}`);
+
+    if (data.restrictedSkipped) {
+      data.skipped = false;
+      data.restrictedSkipped = false;
+    }
+    if (skipCheck) {
+      skipCheck.disabled = false;
+      skipCheck.checked = data.skipped;
+    }
+    if (skipLabel) {
+      skipLabel.classList.toggle("is-skipped", data.skipped);
+    }
+  }
+
+  function ensureEventGroups(event, data) {
+    const groupConfig = getGroupConfig(event);
+    if (!groupConfig) return;
+
+    const groupCount = groupConfig.groupCount;
+    const groupSize = groupConfig.groupSize;
+    const groupKey = `${formData.grade || "all"}:${groupCount}:${groupSize}`;
+
+    if (!Array.isArray(data.groups) || data.groupKey !== groupKey) {
+      const existing = data.participants.filter(p => p.trim() !== "");
+      data.groups = Array.from({ length: groupCount }, (_, groupIdx) =>
+        existing.slice(groupIdx * groupSize, (groupIdx + 1) * groupSize)
+      );
+      data.groupKey = groupKey;
+    }
+
+    while (data.groups.length < groupCount) data.groups.push([]);
+    if (data.groups.length > groupCount) {
+      data.groups = data.groups.slice(0, groupCount);
+    }
+    data.groups = data.groups.map(group => group.slice(0, groupSize));
+    data.activeGroup = Math.min(Math.max(data.activeGroup || 0, 0), groupCount - 1);
+    syncGroupedParticipants(data);
+  }
+
+  function syncGroupedParticipants(data) {
+    data.participants = data.groups.flat().filter(name => name.trim() !== "");
+  }
+
+  function getGroupedRows(event, data) {
+    ensureEventGroups(event, data);
+    return data.groups
+      .map((names, idx) => ({
+        label: `${idx + 1}조`,
+        names: names.filter(name => name.trim() !== ""),
+      }))
+      .filter(row => row.names.length > 0);
+  }
+
+  function getEventParticipants(event, data) {
+    if (isWaveRelayEvent(event)) {
+      return getWaveRelayRows(event, data)
+        .map(row => `${row.label}: ${row.names.join(", ")}`);
+    }
+
+    if (!isGroupedEvent(event)) {
+      return data.participants.filter(p => p.trim() !== "");
+    }
+
+    return getGroupedRows(event, data)
+      .map(row => `${row.label}: ${row.names.join(", ")}`);
+  }
+
+  function getParticipantGender(name) {
+    const student = formData.roster.find(item => item.name === name);
+    return student ? student.gender || "" : "";
+  }
+
+  function getEventParticipantRows(event, data) {
+    if (isWaveRelayEvent(event)) {
+      ensureWaveRelayData(event, data);
+      const rows = [];
+      data.wave.runners.forEach((group, groupIdx) => {
+        event.waveRelay.runnerGenders.forEach(gender => {
+          const name = group[gender];
+          if (name && name.trim()) {
+            rows.push({ role: `주자 ${groupIdx + 1}조`, gender, studentName: name });
+          }
+        });
+      });
+      data.wave.jumpers.forEach(name => {
+        if (name && name.trim()) {
+          rows.push({ role: "점프학생", gender: getParticipantGender(name), studentName: name });
+        }
+      });
+      return rows;
+    }
+
+    if (isGroupedEvent(event)) {
+      ensureEventGroups(event, data);
+      return data.groups.flatMap((group, groupIdx) =>
+        group
+          .filter(name => name.trim() !== "")
+          .map(name => ({
+            role: `${groupIdx + 1}조`,
+            gender: getParticipantGender(name),
+            studentName: name,
+          }))
+      );
+    }
+
+    return data.participants
+      .filter(name => name.trim() !== "")
+      .map(name => ({
+        role: "",
+        gender: getParticipantGender(name),
+        studentName: name,
+      }));
+  }
+
+  function getEventParticipantCount(event, data) {
+    if (isWaveRelayEvent(event)) {
+      ensureWaveRelayData(event, data);
+      return countWaveRunners(data) + data.wave.jumpers.length;
+    }
+
+    if (!isGroupedEvent(event)) {
+      return data.participants.filter(p => p.trim() !== "").length;
+    }
+
+    ensureEventGroups(event, data);
+    return data.groups.flat().filter(name => name.trim() !== "").length;
+  }
+
+  function ensureWaveRelayData(event, data) {
+    const config = event.waveRelay;
+    if (!config) return;
+
+    const waveKey = `${config.runnerGroupCount}:${config.runnerGenders.join("-")}:${config.jumpCount}`;
+    if (!data.wave || data.waveKey !== waveKey) {
+      const existing = data.participants.filter(p => p.trim() !== "");
+      const runnerSlots = config.runnerGroupCount * config.runnerGenders.length;
+      data.wave = {
+        runners: Array.from({ length: config.runnerGroupCount }, (_, groupIdx) => {
+          const group = {};
+          config.runnerGenders.forEach((gender, genderIdx) => {
+            group[gender] = existing[groupIdx * config.runnerGenders.length + genderIdx] || "";
+          });
+          return group;
+        }),
+        jumpers: existing.slice(runnerSlots, runnerSlots + config.jumpCount),
+      };
+      data.waveKey = waveKey;
+      data.waveActive = "runner:0";
+    }
+
+    while (data.wave.runners.length < config.runnerGroupCount) {
+      data.wave.runners.push({});
+    }
+    data.wave.runners = data.wave.runners.slice(0, config.runnerGroupCount);
+    data.wave.runners.forEach(group => {
+      config.runnerGenders.forEach(gender => {
+        if (!group[gender]) group[gender] = "";
+      });
+    });
+    data.wave.jumpers = (data.wave.jumpers || [])
+      .filter(name => name.trim() !== "")
+      .slice(0, config.jumpCount);
+
+    syncWaveRelayParticipants(data);
+  }
+
+  function syncWaveRelayParticipants(data) {
+    const runnerNames = data.wave.runners
+      .flatMap(group => Object.values(group))
+      .filter(name => name.trim() !== "");
+    data.participants = runnerNames.concat(data.wave.jumpers);
+  }
+
+  function countWaveRunners(data) {
+    return data.wave.runners
+      .flatMap(group => Object.values(group))
+      .filter(name => name.trim() !== "")
+      .length;
+  }
+
+  function parseWaveActive(data) {
+    const active = data.waveActive || "";
+    if (active === "jumpers") return { type: "jumpers" };
+
+    const parts = active.split(":");
+    return {
+      type: "runner",
+      groupIdx: Number(parts[1]) || 0,
+    };
+  }
+
+  function getWaveAssignedMap(data) {
+    const assigned = new Map();
+
+    data.wave.runners.forEach((group, groupIdx) => {
+      Object.entries(group).forEach(([gender, name]) => {
+        if (name) {
+          assigned.set(name, {
+            key: `runner:${groupIdx}:${gender}`,
+            label: `${groupIdx + 1}조 ${gender}`,
+          });
+        }
+      });
+    });
+    data.wave.jumpers.forEach(name => {
+      assigned.set(name, { key: "jumpers", label: "점프" });
+    });
+
+    return assigned;
+  }
+
+  function getWaveRelayRows(event, data) {
+    ensureWaveRelayData(event, data);
+    const rows = [];
+
+    data.wave.runners.forEach((group, groupIdx) => {
+      const names = event.waveRelay.runnerGenders
+        .map(gender => group[gender] ? `${gender} ${group[gender]}` : "")
+        .filter(Boolean);
+      if (names.length > 0) rows.push({ label: `주자 ${groupIdx + 1}조`, names });
+    });
+    if (data.wave.jumpers.length > 0) {
+      rows.push({ label: "점프학생", names: data.wave.jumpers });
+    }
+
+    return rows;
+  }
+
+  function renderWaveRelayPicker(idx) {
+    const event  = CONFIG.events[idx];
+    const data   = formData.events[idx];
+    const list   = document.getElementById(`plist-${idx}`);
+    const addBtn = document.getElementById(`btn-add-${idx}`);
+    const maxMsg = document.getElementById(`max-msg-${idx}`);
+    const config = event.waveRelay;
+
+    ensureWaveRelayData(event, data);
+    const parsedActive = parseWaveActive(data);
+    if (parsedActive.type === "runner") {
+      data.waveActive = `runner:${parsedActive.groupIdx}`;
+    }
+    if (addBtn) addBtn.style.display = "none";
+
+    const active = parseWaveActive(data);
+    const activeKey = active.type === "jumpers"
+      ? "jumpers"
+      : `runner:${active.groupIdx}`;
+    const assigned = getWaveAssignedMap(data);
+
+    list.className = "wave-relay-picker";
+    list.innerHTML = "";
+
+    const selector = document.createElement("div");
+    selector.className = "wave-role-selector";
+    data.wave.runners.forEach((group, groupIdx) => {
+      const key = `runner:${groupIdx}`;
+      const selected = config.runnerGenders.filter(gender => group[gender]).length;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "group-tab" + (key === activeKey ? " active" : "");
+      btn.innerHTML = `${groupIdx + 1}조 <span>${selected}/${config.runnerGenders.length}</span>`;
+      btn.disabled = data.skipped;
+      btn.addEventListener("click", () => {
+        data.waveActive = key;
+        renderWaveRelayPicker(idx);
+      });
+      selector.appendChild(btn);
+    });
+
+    const jumpBtn = document.createElement("button");
+    jumpBtn.type = "button";
+    jumpBtn.className = "group-tab" + (activeKey === "jumpers" ? " active" : "");
+    jumpBtn.innerHTML = `점프학생 <span>${data.wave.jumpers.length}/${config.jumpCount}</span>`;
+    jumpBtn.disabled = data.skipped;
+    jumpBtn.addEventListener("click", () => {
+      data.waveActive = "jumpers";
+      renderWaveRelayPicker(idx);
+    });
+    selector.appendChild(jumpBtn);
+    list.appendChild(selector);
+
+    const chips = document.createElement("div");
+    chips.className = "chips-grid";
+    formData.roster.forEach(student => {
+      const assignedInfo = assigned.get(student.name);
+      const isAssignedToActiveRunnerGroup = active.type === "runner"
+        && assignedInfo
+        && assignedInfo.key.startsWith(`runner:${active.groupIdx}:`);
+      const isSelectedHere = active.type === "runner"
+        ? isAssignedToActiveRunnerGroup
+        : assignedInfo && assignedInfo.key === activeKey;
+      const isSelectedElsewhere = assignedInfo && !isSelectedHere;
+      const genderFilled = active.type === "runner" && !!data.wave.runners[active.groupIdx][student.gender];
+      const jumpAtMax = active.type === "jumpers" && data.wave.jumpers.length >= config.jumpCount;
+      const isRunnerGender = active.type === "runner" && config.runnerGenders.includes(student.gender);
+      const isDisabled = data.skipped || isSelectedElsewhere
+        || (!isSelectedHere && active.type === "runner" && (!isRunnerGender || genderFilled))
+        || (!isSelectedHere && jumpAtMax);
+
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "student-chip"
+        + (isSelectedHere ? " selected" : "")
+        + (isDisabled ? " is-disabled" : "");
+      chip.disabled = isDisabled;
+
+      const genderClass = student.gender === "남" ? "male" : student.gender === "여" ? "female" : "";
+      const genderBadge = student.gender
+        ? `<span class="chip-gender ${genderClass}">${escHtml(student.gender)}</span>`
+        : "";
+      const roleBadge = isSelectedElsewhere
+        ? `<span class="chip-group-badge">${escHtml(assignedInfo.label)}</span>`
+        : "";
+      chip.innerHTML = (student.num ? `<span class="chip-num">${escHtml(String(student.num))}</span>` : "")
+        + escHtml(student.name)
+        + genderBadge
+        + roleBadge;
+
+      chip.addEventListener("click", () => {
+        if (active.type === "jumpers") {
+          if (isSelectedHere) {
+            data.wave.jumpers = data.wave.jumpers.filter(name => name !== student.name);
+          } else {
+            if (data.wave.jumpers.length >= config.jumpCount) return;
+            data.wave.jumpers.push(student.name);
+          }
+        } else if (isSelectedHere) {
+          data.wave.runners[active.groupIdx][student.gender] = "";
+        } else {
+          if (!config.runnerGenders.includes(student.gender)) return;
+          if (data.wave.runners[active.groupIdx][student.gender]) return;
+          data.wave.runners[active.groupIdx][student.gender] = student.name;
+        }
+
+        syncWaveRelayParticipants(data);
+        renderWaveRelayPicker(idx);
+      });
+
+      chips.appendChild(chip);
+    });
+    list.appendChild(chips);
+
+    const runnerCount = countWaveRunners(data);
+    const selectedCount = runnerCount + data.wave.jumpers.length;
+    const runnerTotal = config.runnerGroupCount * config.runnerGenders.length;
+    maxMsg.textContent =
+      `${selectedCount} / ${event.maxParticipants}명 선택 · 주자 ${runnerCount} / ${runnerTotal}명 · 점프학생 ${data.wave.jumpers.length} / ${config.jumpCount}명`;
+    maxMsg.classList.remove("hidden");
+    maxMsg.className = "chip-count-msg" + (selectedCount >= event.maxParticipants ? " at-max" : "");
+  }
+
+  function getGenderCounts(data) {
+    const selected = new Set(data.participants.filter(p => p.trim() !== ""));
+    const counts = {};
+
+    formData.roster.forEach(student => {
+      if (selected.has(student.name) && student.gender) {
+        counts[student.gender] = (counts[student.gender] || 0) + 1;
+      }
+    });
+
+    return counts;
+  }
+
+  function formatGenderLimitCount(event, data) {
+    if (!event.genderLimits || formData.roster.length === 0) return "";
+
+    const counts = getGenderCounts(data);
+    return Object.entries(event.genderLimits)
+      .map(([gender, limit]) => `${gender} ${counts[gender] || 0} / ${limit}명`)
+      .join(" · ");
+  }
+
+  function getGenderLimitError(event, data) {
+    if (!event.genderLimits || formData.roster.length === 0) return "";
+
+    const counts = getGenderCounts(data);
+    const exceeded = Object.entries(event.genderLimits).find(([gender, limit]) =>
+      (counts[gender] || 0) > limit
+    );
+
+    return exceeded ? `${event.name}은 ${exceeded[0]}학생을 최대 ${exceeded[1]}명까지 신청할 수 있습니다.` : "";
+  }
+
+  function renderGroupedChipPicker(idx) {
+    const event  = CONFIG.events[idx];
+    const data   = formData.events[idx];
+    const list   = document.getElementById(`plist-${idx}`);
+    const addBtn = document.getElementById(`btn-add-${idx}`);
+    const maxMsg = document.getElementById(`max-msg-${idx}`);
+
+    ensureEventGroups(event, data);
+    const groupConfig = getGroupConfig(event);
+    if (addBtn) addBtn.style.display = "none";
+
+    const activeGroup = data.activeGroup || 0;
+    const activeNames = new Set(data.groups[activeGroup]);
+    const assigned = new Map();
+    data.groups.forEach((group, groupIdx) => {
+      group.forEach(name => assigned.set(name, groupIdx));
+    });
+
+    list.className = "grouped-chip-picker";
+    list.innerHTML = "";
+
+    const selector = document.createElement("div");
+    selector.className = "group-selector";
+    data.groups.forEach((group, groupIdx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "group-tab" + (groupIdx === activeGroup ? " active" : "");
+      btn.innerHTML = `${groupIdx + 1}조 <span>${group.length}/${groupConfig.groupSize}</span>`;
+      btn.disabled = data.skipped;
+      btn.addEventListener("click", () => {
+        data.activeGroup = groupIdx;
+        renderGroupedChipPicker(idx);
+      });
+      selector.appendChild(btn);
+    });
+    list.appendChild(selector);
+
+    const chips = document.createElement("div");
+    chips.className = "chips-grid";
+    formData.roster.forEach(student => {
+      const assignedGroup = assigned.has(student.name) ? assigned.get(student.name) : -1;
+      const isSelectedHere = activeNames.has(student.name);
+      const isSelectedElsewhere = assignedGroup >= 0 && assignedGroup !== activeGroup;
+      const atGroupMax = data.groups[activeGroup].length >= groupConfig.groupSize;
+      const isDisabled = data.skipped || isSelectedElsewhere || (!isSelectedHere && atGroupMax);
+
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "student-chip"
+        + (isSelectedHere ? " selected" : "")
+        + (isDisabled ? " is-disabled" : "");
+      chip.disabled = isDisabled;
+
+      const genderClass = student.gender === "남" ? "male" : student.gender === "여" ? "female" : "";
+      const genderBadge = student.gender
+        ? `<span class="chip-gender ${genderClass}">${escHtml(student.gender)}</span>`
+        : "";
+      const groupBadge = isSelectedElsewhere
+        ? `<span class="chip-group-badge">${assignedGroup + 1}조</span>`
+        : "";
+      chip.innerHTML = (student.num ? `<span class="chip-num">${escHtml(String(student.num))}</span>` : "")
+        + escHtml(student.name)
+        + genderBadge
+        + groupBadge;
+
+      chip.addEventListener("click", () => {
+        if (isSelectedHere) {
+          data.groups[activeGroup] = data.groups[activeGroup].filter(name => name !== student.name);
+        } else {
+          if (data.groups[activeGroup].length >= groupConfig.groupSize) return;
+          data.groups[activeGroup].push(student.name);
+        }
+        syncGroupedParticipants(data);
+        renderGroupedChipPicker(idx);
+      });
+
+      chips.appendChild(chip);
+    });
+    list.appendChild(chips);
+
+    const selectedCount = getEventParticipantCount(event, data);
+    const label = groupConfig.label ? `${groupConfig.label} · ` : "";
+    maxMsg.textContent =
+      `${label}${selectedCount} / ${event.maxParticipants}명 선택 · ${activeGroup + 1}조 ${data.groups[activeGroup].length} / ${groupConfig.groupSize}명`;
+    maxMsg.classList.remove("hidden");
+    maxMsg.className = "chip-count-msg" + (selectedCount >= event.maxParticipants ? " at-max" : "");
   }
 
   // 명렬이 있을 때: 칩(chip) 선택 UI
@@ -161,6 +749,7 @@
 
     const max      = event.maxParticipants;
     const selected = new Set(data.participants.filter(p => p.trim() !== ""));
+    const genderCounts = getGenderCounts(data);
 
     list.className = "chips-grid";
     list.innerHTML = "";
@@ -168,7 +757,9 @@
     formData.roster.forEach(student => {
       const isSelected = selected.has(student.name);
       const atMax      = max > 0 && selected.size >= max;
-      const isDisabled = data.skipped || (!isSelected && atMax);
+      const genderLimit = event.genderLimits && student.gender ? event.genderLimits[student.gender] : 0;
+      const atGenderMax = genderLimit > 0 && (genderCounts[student.gender] || 0) >= genderLimit;
+      const isDisabled = data.skipped || (!isSelected && (atMax || atGenderMax));
 
       const chip = document.createElement("button");
       chip.type = "button";
@@ -189,6 +780,7 @@
           selected.delete(student.name);
         } else {
           if (max > 0 && selected.size >= max) return;
+          if (genderLimit > 0 && (genderCounts[student.gender] || 0) >= genderLimit) return;
           selected.add(student.name);
         }
         data.participants = Array.from(selected);
@@ -202,7 +794,8 @@
     const countText = max > 0
       ? `${selected.size} / ${max}명 선택`
       : `${selected.size}명 선택됨`;
-    maxMsg.textContent = countText;
+    const genderText = formatGenderLimitCount(event, data);
+    maxMsg.textContent = genderText ? `${countText} · ${genderText}` : countText;
     maxMsg.classList.remove("hidden");
     maxMsg.className = "chip-count-msg" + (max > 0 && selected.size >= max ? " at-max" : "");
   }
@@ -451,7 +1044,13 @@
     // 종목 스텝: 건너뛰지 않았으면 최소 1명 입력
     const eventIdx = currentStep - 2;
     if (eventIdx >= 0 && eventIdx < CONFIG.events.length) {
+      const event = CONFIG.events[eventIdx];
       const data = formData.events[eventIdx];
+      const genderLimitError = getGenderLimitError(event, data);
+      if (genderLimitError) {
+        showToast(genderLimitError);
+        return false;
+      }
       if (!data.skipped) {
         const filled = data.participants.filter(p => p.trim() !== "");
         if (filled.length === 0) {
@@ -527,19 +1126,41 @@
     container.appendChild(eventsTable);
 
     const tbody = eventsTable.querySelector("#summary-tbody");
-    formData.events.forEach(ev => {
+    formData.events.forEach((ev, idx) => {
+      const event = CONFIG.events[idx];
+      const allowed = isEventAllowed(event);
       const tr = document.createElement("tr");
-      const filled = ev.participants.filter(p => p.trim() !== "");
+      const filledCount = getEventParticipantCount(event, ev);
 
-      if (ev.skipped || filled.length === 0) {
+      if (!allowed) {
+        tr.innerHTML = `
+          <td>${escHtml(ev.name)}</td>
+          <td class="no-participants">${escHtml(event.allowedGrades.join(", "))}만 참가</td>
+        `;
+      } else if (ev.skipped || filledCount === 0) {
         tr.innerHTML = `
           <td>${escHtml(ev.name)}</td>
           <td class="no-participants">참가 없음</td>
         `;
       } else {
-        const tags = filled.map(p =>
-          `<span class="participant-tag">${escHtml(p)}</span>`
-        ).join("");
+        const tags = isWaveRelayEvent(event)
+          ? getWaveRelayRows(event, ev).map(row => `
+              <div class="participant-group-summary">
+                <strong>${escHtml(row.label)}</strong>
+                <div>${row.names.map(name => `<span class="participant-tag">${escHtml(name)}</span>`).join("")}</div>
+              </div>
+            `).join("")
+          : isGroupedEvent(event)
+          ? getGroupedRows(event, ev).map(row => `
+              <div class="participant-group-summary">
+                <strong>${escHtml(row.label)}</strong>
+                <div>${row.names.map(name => `<span class="participant-tag">${escHtml(name)}</span>`).join("")}</div>
+              </div>
+            `).join("")
+          : ev.participants
+              .filter(p => p.trim() !== "")
+              .map(p => `<span class="participant-tag">${escHtml(p)}</span>`)
+              .join("");
         tr.innerHTML = `
           <td>${escHtml(ev.name)}</td>
           <td><div class="participants-list-text">${tags}</div></td>
@@ -598,11 +1219,23 @@
 
   // ── 참가신청서 PDF 출력 ──────────────────────────────────
   function printDocument() {
-    const eventsRows = formData.events.map(ev => {
-      const filled = ev.participants.filter(p => p.trim() !== "");
-      const cell = (ev.skipped || filled.length === 0)
+    const eventsRows = formData.events.map((ev, idx) => {
+      const event = CONFIG.events[idx];
+      const allowed = isEventAllowed(event);
+      const filledCount = getEventParticipantCount(event, ev);
+      const cell = !allowed
+        ? `<span style="color:#999;font-style:italic;">${escHtml(event.allowedGrades.join(", "))}만 참가</span>`
+        : (ev.skipped || filledCount === 0)
         ? `<span style="color:#999;font-style:italic;">참가 없음</span>`
-        : filled.map(p => escHtml(p)).join(", ");
+        : isWaveRelayEvent(event)
+        ? getWaveRelayRows(event, ev).map(row =>
+            `<div><strong>${escHtml(row.label)}</strong>: ${row.names.map(name => escHtml(name)).join(", ")}</div>`
+          ).join("")
+        : isGroupedEvent(event)
+        ? getGroupedRows(event, ev).map(row =>
+            `<div><strong>${escHtml(row.label)}</strong>: ${row.names.map(name => escHtml(name)).join(", ")}</div>`
+          ).join("")
+        : ev.participants.filter(p => p.trim() !== "").map(p => escHtml(p)).join(", ");
       return `<tr><td>${escHtml(ev.name)}</td><td>${cell}</td></tr>`;
     }).join("");
 
@@ -700,11 +1333,15 @@
       class:       formData.class,
       writerName:  formData.writerName,
       teacherName: formData.teacherName,
-      events: formData.events.map(ev => ({
-        name:         ev.name,
-        participants: ev.participants.filter(p => p.trim() !== ""),
-        skipped:      ev.skipped,
-      })),
+      events: formData.events.map((ev, idx) => {
+        const allowed = isEventAllowed(CONFIG.events[idx]);
+        return {
+          name:            ev.name,
+          participants:    allowed ? getEventParticipants(CONFIG.events[idx], ev) : [],
+          participantRows: allowed ? getEventParticipantRows(CONFIG.events[idx], ev) : [],
+          skipped:         ev.skipped || !allowed,
+        };
+      }),
     };
 
     try {
@@ -815,6 +1452,12 @@
         draft.events.forEach((ev, idx) => {
           formData.events[idx].participants = ev.participants || [""];
           formData.events[idx].skipped      = ev.skipped || false;
+          formData.events[idx].groups       = ev.groups;
+          formData.events[idx].groupKey     = ev.groupKey;
+          formData.events[idx].activeGroup  = ev.activeGroup || 0;
+          formData.events[idx].wave         = ev.wave;
+          formData.events[idx].waveKey      = ev.waveKey;
+          formData.events[idx].waveActive   = ev.waveActive;
           renderParticipants(idx);
           const skipCheck = document.getElementById(`skip-check-${idx}`);
           if (skipCheck) {

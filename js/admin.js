@@ -36,7 +36,7 @@
     document.getElementById("login-overlay").classList.add("hidden");
     document.getElementById("admin-ui").classList.remove("hidden");
 
-    document.getElementById("admin-badge").textContent = CONFIG.eventTitle;
+    document.getElementById("admin-badge").textContent = CONFIG.eventBadge || CONFIG.eventTitle;
     document.getElementById("admin-title").textContent =
       CONFIG.schoolName + " " + CONFIG.eventTitle + " 신청 현황";
 
@@ -289,7 +289,7 @@
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `체육대회_신청명단_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `${CONFIG.eventTitle.replace(/\s+/g, "_")}_신청명단_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }

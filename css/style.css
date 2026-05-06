@@ -165,6 +165,32 @@ body {
   color: var(--color-muted);
   margin-bottom: 1.25rem;
 }
+.event-method-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
+}
+.event-method-table th,
+.event-method-table td {
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+  text-align: left;
+}
+.event-method-table th {
+  width: 5rem;
+  color: var(--color-secondary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.event-method-table td {
+  white-space: pre-line;
+}
+.event-method-table tr:last-child th,
+.event-method-table tr:last-child td {
+  border-bottom: none;
+}
 
 /* ── Info Table (안내 카드 내) ───────────────────────────── */
 .info-table {
@@ -185,6 +211,21 @@ body {
   white-space: nowrap;
 }
 .info-table tr:last-child td { border-bottom: none; }
+.event-group {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.7rem;
+  line-height: 1.55;
+  margin-bottom: 0.35rem;
+}
+.event-group:last-child { margin-bottom: 0; }
+.event-group strong {
+  color: var(--color-secondary);
+  white-space: nowrap;
+}
+.event-group span {
+  color: var(--color-text);
+}
 
 /* ── Intro Text ───────────────────────────────────────────── */
 .intro-text {
@@ -205,6 +246,20 @@ body {
   color: #1A4AB5;
   margin: 1rem 0;
   line-height: 1.6;
+}
+.confirm-notes {
+  margin-top: 1.5rem;
+}
+.confirm-notes strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+.confirm-notes ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.confirm-notes li + li {
+  margin-top: 0.3rem;
 }
 
 /* ── Form Fields ──────────────────────────────────────────── */
@@ -337,6 +392,23 @@ input:focus, select:focus, textarea:focus {
   font-size: 0.8rem;
   color: var(--color-warning);
   margin-top: 0.4rem;
+}
+.event-restriction {
+  border: 1px solid #F5CBA7;
+  border-radius: var(--radius-sm);
+  background: #FFF8F0;
+  color: var(--color-warning);
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.event-restriction strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.event-restriction span {
+  color: var(--color-text);
 }
 
 /* ── Skip Toggle ──────────────────────────────────────────── */
@@ -521,6 +593,21 @@ input:focus, select:focus, textarea:focus {
   flex-wrap: wrap;
   gap: 0.4rem;
 }
+.participant-group-summary {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 0.45rem;
+  width: 100%;
+}
+.participant-group-summary strong {
+  color: var(--color-secondary);
+  line-height: 1.9;
+}
+.participant-group-summary div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
 .participant-tag {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
@@ -673,6 +760,41 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
   gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
+.group-selector {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+.wave-role-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+.group-tab {
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--color-text);
+  padding: 0.55rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.group-tab span {
+  display: block;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+.group-tab.active {
+  border-color: var(--color-secondary);
+  background: #EBF1FE;
+  color: var(--color-secondary);
+}
 .student-chip {
   display: inline-flex;
   align-items: center;
@@ -723,6 +845,14 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
 }
 .chip-gender.male   { background: #DBEAFE; color: #1D4ED8; }
 .chip-gender.female { background: #FCE7F3; color: #9D174D; }
+.chip-group-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.32rem;
+  border-radius: 3px;
+  background: #FFF3D6;
+  color: #A05A00;
+}
 .student-chip.selected .chip-gender {
   background: rgba(255,255,255,0.25);
   color: #fff;
@@ -777,4 +907,5 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
   .bottom-nav-inner { flex-wrap: wrap; }
   .bottom-nav .btn-save { order: -1; flex-basis: 100%; }
   .draft-banner { flex-direction: column; align-items: flex-start; }
+  .group-selector { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -11,15 +11,19 @@
 // 5. 배포 URL을 js/config.js의 scriptUrl에 붙여넣기
 //
 // [시트 구성]
-// - "신청목록" 시트: 참가신청 저장 (자동 생성)
+// - "신청목록" 시트: 관리자 페이지용 종목별 신청 현황 (자동 생성)
+// - "학급별제출" 시트: 각반별 전체 참가신청서 내용 (자동 생성)
+// - "종목별검색" 시트: 종목/학생/역할별 검색용 신청 내역 (자동 생성)
 // - "명렬" 시트: 학급별 학생 명단 (직접 작성)
-//   컬럼: A=학년, B=반, C=번호, D=이름
-//   예시: 1학년 | 1반 | 1 | 김철수
+//   컬럼: A=학년, B=반, C=번호, D=이름, E=성별
+//   예시: 1 | 1 | 1 | 김철수 | 남
 // ============================================================
 
-const SHEET_NAME        = "신청목록";
-const ROSTER_SHEET_NAME = "명렬";
-const ADMIN_PASSWORD    = "admin1234"; // ← 반드시 변경하세요
+const SHEET_NAME               = "신청목록";
+const CLASS_SUMMARY_SHEET_NAME = "학급별제출";
+const EVENT_SEARCH_SHEET_NAME  = "종목별검색";
+const ROSTER_SHEET_NAME        = "명렬";
+const ADMIN_PASSWORD           = "CHANGE_ME"; // ← Apps Script 배포 전 실제 비밀번호로 변경하세요
 
 // ── POST 핸들러: 참가신청 저장 ────────────────────────────
 function doPost(e) {
@@ -34,37 +38,66 @@ function doPost(e) {
     }
 
     const sheet = getOrCreateSheet();
+    const classSummarySheet = getOrCreateClassSummarySheet();
+    const eventSearchSheet = getOrCreateEventSearchSheet();
     const timestamp = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
     // 중복 제출 확인
-    const existing = sheet.getDataRange().getValues();
-    for (let i = 1; i < existing.length; i++) {
-      if (existing[i][1] === data.grade && existing[i][2] === data.class) {
-        return buildResponse({
-          success: false,
-          message: `${data.grade} ${data.class}은(는) 이미 신청이 완료되었습니다. 수정이 필요하면 담당 선생님께 문의하세요.`
-        });
-      }
+    if (hasExistingSubmission(sheet, classSummarySheet, data.grade, data.class)) {
+      return buildResponse({
+        success: false,
+        message: `${data.grade} ${data.class}은(는) 이미 신청이 완료되었습니다. 수정이 필요하면 정경희, 유성욱 선생님께 문의하세요.`
+      });
     }
 
-    // 종목별로 각각 행 추가
-    data.events.forEach(eventEntry => {
-      const participants = Array.isArray(eventEntry.participants)
-        ? eventEntry.participants.filter(p => p && p.trim() !== "").join(", ")
-        : "";
-      const isSkipped = eventEntry.skipped === true;
+    const normalizedEvents = data.events.map(normalizeEventEntry);
 
-      sheet.appendRow([
+    // 관리자 페이지용: 종목별로 각각 행 추가
+    const eventRows = normalizedEvents.map(eventEntry => [
         timestamp,
         data.grade,
         data.class,
         eventEntry.name,
-        isSkipped ? "참가 없음" : participants,
-        isSkipped ? "Y" : "N",
+        eventEntry.skipped ? "참가 없음" : eventEntry.participantText,
+        eventEntry.skipped ? "Y" : "N",
         data.writerName  || "",
         data.teacherName || ""
-      ]);
+    ]);
+    appendRows(sheet, eventRows);
+
+    // 각반별 원문 확인용: 한 학급당 한 행
+    const classSummaryText = normalizedEvents.map(eventEntry => {
+      const detail = eventEntry.skipped ? "참가 없음" : (eventEntry.participantText || "참가 없음");
+      return `${eventEntry.name}: ${detail}`;
+    }).join("\n");
+    appendRows(classSummarySheet, [[
+      timestamp,
+      data.grade,
+      data.class,
+      data.writerName  || "",
+      data.teacherName || "",
+      classSummaryText
+    ]]);
+
+    // 종목/학생 검색용: 참가 학생 1명당 한 행
+    const searchRows = [];
+    normalizedEvents.forEach(eventEntry => {
+      if (eventEntry.skipped) return;
+      eventEntry.participantRows.forEach(row => {
+        searchRows.push([
+          timestamp,
+          data.grade,
+          data.class,
+          eventEntry.name,
+          row.role || "",
+          row.studentName || "",
+          row.gender || "",
+          data.writerName  || "",
+          data.teacherName || ""
+        ]);
+      });
     });
+    appendRows(eventSearchSheet, searchRows);
 
     return buildResponse({ success: true, message: "신청이 완료되었습니다!" });
 
@@ -109,7 +142,7 @@ function doGet(e) {
     }
 
     // 헬스체크
-    return buildResponse({ success: true, message: "체육대회 참가신청 API 정상 동작 중" });
+    return buildResponse({ success: true, message: "사제동행 체육 한마당 참가신청 API 정상 동작 중" });
 
   } catch (err) {
     return buildResponse({ success: false, message: "서버 오류: " + err.message });
@@ -158,6 +191,99 @@ function getRosterData(grade, className) {
   return buildResponse({ success: true, students: students });
 }
 
+// ── 제출 데이터 정리 ─────────────────────────────────────
+function normalizeEventEntry(eventEntry) {
+  const participants = Array.isArray(eventEntry.participants)
+    ? eventEntry.participants
+        .map(item => String(item || "").trim())
+        .filter(item => item !== "")
+    : [];
+
+  const participantRows = Array.isArray(eventEntry.participantRows)
+    ? eventEntry.participantRows
+        .map(normalizeParticipantRow)
+        .filter(row => row !== null)
+    : buildSearchRowsFromParticipants(participants);
+
+  return {
+    name: String(eventEntry.name || "").trim(),
+    participantText: participants.join(", "),
+    participantRows: participantRows,
+    skipped: eventEntry.skipped === true || (participants.length === 0 && participantRows.length === 0)
+  };
+}
+
+function normalizeParticipantRow(row) {
+  const studentName = String(row.studentName || row.name || "").trim();
+  if (!studentName) return null;
+  return {
+    role: String(row.role || "").trim(),
+    studentName: studentName,
+    gender: String(row.gender || "").trim()
+  };
+}
+
+function buildSearchRowsFromParticipants(participants) {
+  const rows = [];
+  participants.forEach(item => {
+    const text = String(item || "").trim();
+    if (!text) return;
+
+    const colonIndex = text.indexOf(":");
+    if (colonIndex >= 0) {
+      const role = text.slice(0, colonIndex).trim();
+      const names = text.slice(colonIndex + 1).split(",");
+      names.forEach(nameText => {
+        const parsed = parseGenderName(nameText);
+        if (parsed.studentName) {
+          rows.push({
+            role: role,
+            studentName: parsed.studentName,
+            gender: parsed.gender
+          });
+        }
+      });
+    } else {
+      const parsed = parseGenderName(text);
+      rows.push({
+        role: "",
+        studentName: parsed.studentName,
+        gender: parsed.gender
+      });
+    }
+  });
+  return rows;
+}
+
+function parseGenderName(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(남|여)\s+(.+)$/);
+  if (match) {
+    return { gender: match[1], studentName: match[2].trim() };
+  }
+  return { gender: "", studentName: text };
+}
+
+function hasExistingSubmission(eventSheet, classSummarySheet, grade, className) {
+  if (hasClassRow(classSummarySheet, grade, className)) return true;
+  return hasClassRow(eventSheet, grade, className);
+}
+
+function hasClassRow(sheet, grade, className) {
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][1] === grade && rows[i][2] === className) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function appendRows(sheet, rows) {
+  if (!rows || rows.length === 0) return;
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+}
+
 // ── 신청목록 시트 초기화 ─────────────────────────────────
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -183,6 +309,65 @@ function getOrCreateSheet() {
     sheet.setColumnWidth(6, 70);
     sheet.setColumnWidth(7, 90);
     sheet.setColumnWidth(8, 90);
+  }
+
+  return sheet;
+}
+
+// ── 학급별제출 시트 초기화 ────────────────────────────────
+function getOrCreateClassSummarySheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(CLASS_SUMMARY_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(CLASS_SUMMARY_SHEET_NAME);
+    const headers = ["등록일시", "학년", "반", "작성자", "담임교사", "신청내용"];
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange
+      .setBackground("#2A6AE8")
+      .setFontColor("#FFFFFF")
+      .setFontWeight("bold");
+
+    sheet.setColumnWidth(1, 160);
+    sheet.setColumnWidth(2, 70);
+    sheet.setColumnWidth(3, 60);
+    sheet.setColumnWidth(4, 90);
+    sheet.setColumnWidth(5, 90);
+    sheet.setColumnWidth(6, 700);
+  }
+
+  return sheet;
+}
+
+// ── 종목별검색 시트 초기화 ────────────────────────────────
+function getOrCreateEventSearchSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(EVENT_SEARCH_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(EVENT_SEARCH_SHEET_NAME);
+    const headers = ["등록일시", "학년", "반", "종목", "역할/조", "학생명", "성별", "작성자", "담임교사"];
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange
+      .setBackground("#2A6AE8")
+      .setFontColor("#FFFFFF")
+      .setFontWeight("bold");
+
+    sheet.setColumnWidth(1, 160);
+    sheet.setColumnWidth(2, 70);
+    sheet.setColumnWidth(3, 60);
+    sheet.setColumnWidth(4, 170);
+    sheet.setColumnWidth(5, 110);
+    sheet.setColumnWidth(6, 110);
+    sheet.setColumnWidth(7, 60);
+    sheet.setColumnWidth(8, 90);
+    sheet.setColumnWidth(9, 90);
   }
 
   return sheet;
