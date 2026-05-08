@@ -23,12 +23,18 @@ const SHEET_NAME               = "신청목록";
 const CLASS_SUMMARY_SHEET_NAME = "학급별제출";
 const EVENT_SEARCH_SHEET_NAME  = "종목별검색";
 const ROSTER_SHEET_NAME        = "명렬";
+const SCORE_SHEET_NAME         = "점수기록";
 const ADMIN_PASSWORD           = "CHANGE_ME"; // ← Apps Script 배포 전 실제 비밀번호로 변경하세요
+const JUDGE_PASSWORD           = "CHANGE_ME"; // ← 심판 로그인 비밀번호로 변경하세요
 
 // ── POST 핸들러: 참가신청 저장 ────────────────────────────
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
+
+    if (data.action === "saveJudgeScore") {
+      return saveJudgeScore(data);
+    }
 
     if (!data.grade || !data.class) {
       return buildResponse({ success: false, message: "학년과 반을 입력해주세요." });
@@ -114,6 +120,36 @@ function doGet(e) {
       return getRosterData(e.parameter.grade, e.parameter.class);
     }
 
+    // 당일 운영 화면: 비밀번호 없는 읽기 전용 조회
+    if (e.parameter.action === "getDayData") {
+      return getDayData();
+    }
+
+    // 심판 로그인 확인
+    if (e.parameter.action === "judgeLogin") {
+      if (e.parameter.password !== JUDGE_PASSWORD) {
+        return buildResponse({ success: false, message: "심판 비밀번호가 올바르지 않습니다." });
+      }
+      return buildResponse({ success: true, judge: true });
+    }
+
+    // 심판 점수 조회
+    if (e.parameter.action === "getJudgeScores") {
+      if (e.parameter.password !== JUDGE_PASSWORD) {
+        return buildResponse({ success: false, message: "심판 비밀번호가 올바르지 않습니다." });
+      }
+      return getJudgeScoreData();
+    }
+
+    // 당일 운영 화면: 종목별 참가자 상세 조회
+    if (e.parameter.action === "getEventEntries") {
+      if (e.parameter.password !== ADMIN_PASSWORD) {
+        return buildResponse({ success: false, message: "비밀번호가 올바르지 않습니다." });
+      }
+
+      return getEventEntryData();
+    }
+
     // 관리자 데이터 조회
     if (e.parameter.action === "getData") {
       if (e.parameter.password !== ADMIN_PASSWORD) {
@@ -147,6 +183,113 @@ function doGet(e) {
   } catch (err) {
     return buildResponse({ success: false, message: "서버 오류: " + err.message });
   }
+}
+
+// ── 당일 운영 화면용 공개 조회 ───────────────────────────────
+function getDayData() {
+  const sheet = getOrCreateSheet();
+  const rows = sheet.getDataRange().getValues();
+  const records = rows.length <= 1
+    ? []
+    : rows.slice(1).map(row => ({
+      timestamp:   row[0],
+      grade:       row[1],
+      class:       row[2],
+      event:       row[3],
+      participants: row[4],
+      skipped:     row[5] === "Y",
+      writerName:  row[6] || "",
+      teacherName: row[7] || ""
+    }));
+
+  const eventSearchSheet = getOrCreateEventSearchSheet();
+  const eventRows = eventSearchSheet.getDataRange().getValues();
+  const entries = eventRows.length <= 1
+    ? []
+    : eventRows.slice(1)
+      .map(row => ({
+        timestamp:   row[0],
+        grade:       row[1],
+        class:       row[2],
+        event:       row[3],
+        role:        row[4] || "",
+        studentName: row[5] || "",
+        gender:      row[6] || "",
+        writerName:  row[7] || "",
+        teacherName: row[8] || ""
+      }))
+      .filter(row => row.event && row.studentName);
+
+  return buildResponse({
+    success: true,
+    records: records,
+    entries: entries,
+    totalRecords: records.length,
+    totalEntries: entries.length
+  });
+}
+
+// ── 심판 점수 저장 ─────────────────────────────────────────
+function saveJudgeScore(data) {
+  if (data.password !== JUDGE_PASSWORD) {
+    return buildResponse({ success: false, message: "심판 비밀번호가 올바르지 않습니다." });
+  }
+
+  if (!data.event || !data.grade || !data.class) {
+    return buildResponse({ success: false, message: "종목, 학년, 반을 모두 입력해주세요." });
+  }
+
+  const score = Number(data.score);
+  if (isNaN(score)) {
+    return buildResponse({ success: false, message: "점수 값이 올바르지 않습니다." });
+  }
+
+  const sheet = getOrCreateScoreSheet();
+  const timestamp = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+
+  appendRows(sheet, [[
+    timestamp,
+    data.event,
+    data.grade,
+    data.class,
+    data.recordType || "",
+    data.rank || "",
+    data.recordValue || "",
+    data.recordLabel || "",
+    data.bonus === true ? "Y" : "N",
+    score,
+    data.judgeName || "",
+    data.memo || ""
+  ]]);
+
+  return buildResponse({ success: true, message: "점수가 저장되었습니다.", score: score });
+}
+
+// ── 심판 점수 조회 ─────────────────────────────────────────
+function getJudgeScoreData() {
+  const sheet = getOrCreateScoreSheet();
+  const rows = sheet.getDataRange().getValues();
+
+  if (rows.length <= 1) {
+    return buildResponse({ success: true, data: [], total: 0 });
+  }
+
+  const records = rows.slice(1).map(row => ({
+    timestamp:   row[0],
+    event:       row[1],
+    grade:       row[2],
+    class:       row[3],
+    recordType:  row[4] || "",
+    rank:        row[5] || "",
+    recordValue: row[6] || "",
+    recordLabel: row[7] || "",
+    bonus:       row[8] === "Y",
+    score:       row[9],
+    judgeName:   row[10] || "",
+    memo:        row[11] || ""
+  }));
+
+  return buildResponse({ success: true, data: records, total: records.length });
 }
 
 // ── 명렬 조회 ─────────────────────────────────────────────
@@ -189,6 +332,32 @@ function getRosterData(grade, className) {
   students.sort((a, b) => Number(a.num) - Number(b.num));
 
   return buildResponse({ success: true, students: students });
+}
+
+// ── 당일 운영 화면용 참가자 상세 조회 ─────────────────────────
+function getEventEntryData() {
+  const sheet = getOrCreateEventSearchSheet();
+  const rows = sheet.getDataRange().getValues();
+
+  if (rows.length <= 1) {
+    return buildResponse({ success: true, data: [], total: 0 });
+  }
+
+  const records = rows.slice(1)
+    .map(row => ({
+      timestamp:   row[0],
+      grade:       row[1],
+      class:       row[2],
+      event:       row[3],
+      role:        row[4] || "",
+      studentName: row[5] || "",
+      gender:      row[6] || "",
+      writerName:  row[7] || "",
+      teacherName: row[8] || ""
+    }))
+    .filter(row => row.event && row.studentName);
+
+  return buildResponse({ success: true, data: records, total: records.length });
 }
 
 // ── 제출 데이터 정리 ─────────────────────────────────────
@@ -368,6 +537,53 @@ function getOrCreateEventSearchSheet() {
     sheet.setColumnWidth(7, 60);
     sheet.setColumnWidth(8, 90);
     sheet.setColumnWidth(9, 90);
+  }
+
+  return sheet;
+}
+
+// ── 점수기록 시트 초기화 ───────────────────────────────────
+function getOrCreateScoreSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SCORE_SHEET_NAME);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SCORE_SHEET_NAME);
+    const headers = [
+      "입력일시",
+      "종목",
+      "학년",
+      "반",
+      "기록방식",
+      "순위",
+      "기록값",
+      "기록표시",
+      "기록최우수",
+      "점수",
+      "심판",
+      "메모"
+    ];
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange
+      .setBackground("#2A6AE8")
+      .setFontColor("#FFFFFF")
+      .setFontWeight("bold");
+
+    sheet.setColumnWidth(1, 160);
+    sheet.setColumnWidth(2, 180);
+    sheet.setColumnWidth(3, 70);
+    sheet.setColumnWidth(4, 60);
+    sheet.setColumnWidth(5, 100);
+    sheet.setColumnWidth(6, 70);
+    sheet.setColumnWidth(7, 100);
+    sheet.setColumnWidth(8, 160);
+    sheet.setColumnWidth(9, 90);
+    sheet.setColumnWidth(10, 70);
+    sheet.setColumnWidth(11, 90);
+    sheet.setColumnWidth(12, 240);
   }
 
   return sheet;
