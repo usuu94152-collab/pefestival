@@ -42,14 +42,14 @@
       note: "1위 120점, 2위 100점, 3위 80점, 4위 60점.",
     },
     "긴 줄넘기 (8자 마라톤)": {
-      type: "rank",
+      type: "jumpCount",
       scores: { 1: 100, 2: 80, 3: 60 },
-      note: "1위 100점, 2위 80점, 3위 60점.",
+      note: "반별 성공 횟수를 입력하면 1위 100점, 2위 80점, 3위 60점으로 자동 계산.",
     },
     "긴 줄넘기 (함께 뛰기)": {
-      type: "rank",
+      type: "jumpCount",
       scores: { 1: 100, 2: 80, 3: 60 },
-      note: "1위 100점, 2위 80점, 3위 60점.",
+      note: "반별 성공 횟수를 입력하면 1위 100점, 2위 80점, 3위 60점으로 자동 계산.",
     },
     "2인3각 / 4인5각": {
       type: "rank",
@@ -750,13 +750,15 @@
     }
 
     els["judge-rule-note"].textContent = `${activeJudgeGrade} 기준 · ${rule.note}`;
-    els["judge-rank-board"].classList.toggle("hidden", rule.type !== "rank");
-    els["judge-single-class-row"].classList.toggle("hidden", rule.type === "rank");
+    els["judge-rank-board"].classList.toggle("hidden", !["rank", "jumpCount"].includes(rule.type));
+    els["judge-single-class-row"].classList.toggle("hidden", ["rank", "jumpCount"].includes(rule.type));
     els["judge-count-row"].classList.toggle("hidden", rule.type !== "count");
     els["judge-parade-row"].classList.toggle("hidden", rule.type !== "parade");
 
     if (rule.type === "rank") {
       renderRankBoard(rule);
+    } else if (rule.type === "jumpCount") {
+      renderJumpCountBoard(rule);
     }
 
     els["judge-score-value"].textContent = calculateJudgeScore().score;
@@ -799,6 +801,37 @@
     els["judge-rank-board"].dataset.ruleSignature = ruleSignature;
   }
 
+  function renderJumpCountBoard(rule) {
+    const ruleSignature = [
+      activeJudgeGrade,
+      els["judge-event"].value,
+      "jumpCount",
+      JSON.stringify(rule.scores),
+    ].join("|");
+    if (els["judge-rank-board"].dataset.ruleSignature === ruleSignature) return;
+
+    els["judge-rank-board"].innerHTML = CONFIG.classes.map(className => `
+      <div class="judge-jump-line" data-class="${escHtml(className)}">
+        <div class="judge-rank-label">
+          <strong>${escHtml(className)}</strong>
+          <span>${escHtml(activeJudgeGrade)}</span>
+        </div>
+        <input
+          type="number"
+          class="judge-jump-count"
+          data-class="${escHtml(className)}"
+          min="0"
+          step="1"
+          placeholder="횟수"
+          aria-label="${escHtml(activeJudgeGrade)} ${escHtml(className)} 줄넘기 횟수"
+        />
+        <div class="judge-jump-rank" data-class="${escHtml(className)}">-</div>
+        <div class="judge-rank-score" data-class="${escHtml(className)}">0점</div>
+      </div>
+    `).join("");
+    els["judge-rank-board"].dataset.ruleSignature = ruleSignature;
+  }
+
   function getRankEntries() {
     const rule = getSelectedScoreRule();
     if (!rule || rule.type !== "rank") return [];
@@ -832,6 +865,63 @@
     });
   }
 
+  function getJumpCountEntries() {
+    const rule = getSelectedScoreRule();
+    if (!rule || rule.type !== "jumpCount") return [];
+
+    const rows = Array.from(els["judge-rank-board"].querySelectorAll(".judge-jump-line"));
+    const measured = rows
+      .map(row => {
+        const className = row.dataset.class || "";
+        const input = row.querySelector(".judge-jump-count");
+        const rawValue = input ? input.value.trim() : "";
+        const count = rawValue === "" ? null : Math.max(0, Number(rawValue || 0));
+        return { row, class: className, count, rawValue };
+      })
+      .filter(item => item.rawValue !== "" && !Number.isNaN(item.count));
+
+    const sorted = measured
+      .slice()
+      .sort((a, b) => Number(b.count) - Number(a.count) || toNumber(a.class) - toNumber(b.class));
+
+    let previousCount = null;
+    let currentRank = 0;
+    sorted.forEach((item, index) => {
+      if (previousCount === null || item.count !== previousCount) {
+        currentRank = index + 1;
+        previousCount = item.count;
+      }
+      item.rank = currentRank;
+      item.score = Number(rule.scores[currentRank] || 0);
+    });
+
+    rows.forEach(row => {
+      row.querySelector(".judge-jump-rank").textContent = "-";
+      row.querySelector(".judge-rank-score").textContent = "0점";
+    });
+
+    sorted.forEach(item => {
+      const rankLabel = item.score > 0 ? `${item.rank}위` : "순위권 밖";
+      item.row.querySelector(".judge-jump-rank").textContent = rankLabel;
+      item.row.querySelector(".judge-rank-score").textContent = `${item.score}점`;
+    });
+
+    return sorted.map(item => {
+      const rankLabel = item.score > 0 ? `${item.rank}위` : "순위권 밖";
+      return {
+        event: els["judge-event"].value,
+        grade: activeJudgeGrade,
+        class: item.class,
+        recordType: "횟수",
+        rank: item.score > 0 ? String(item.rank) : "",
+        recordValue: `${item.count}회`,
+        recordLabel: `${item.count}회 · ${rankLabel}`,
+        bonus: false,
+        score: item.score,
+      };
+    });
+  }
+
   function getSelectedScoreRule() {
     return SCORE_RULES[els["judge-event"].value];
   }
@@ -861,6 +951,20 @@
         bonus: entries.some(entry => entry.bonus),
         score: entries.reduce((sum, entry) => sum + entry.score, 0),
         recordLabel: `${entries.filter(entry => entry.grade && entry.class).length}개 순위 입력`,
+        entries,
+      };
+    }
+
+    if (rule.type === "jumpCount") {
+      const entries = getJumpCountEntries();
+      return {
+        event: eventName,
+        recordType: "횟수",
+        rank: "",
+        recordValue: "",
+        bonus: false,
+        score: entries.reduce((sum, entry) => sum + entry.score, 0),
+        recordLabel: `${entries.length}개 반 기록 입력`,
         entries,
       };
     }
@@ -917,7 +1021,7 @@
       }].filter(entry => entry.event && entry.grade && entry.class);
 
     if (saveRows.length === 0) {
-      setJudgeStatus("저장할 학반을 선택해주세요.", true);
+      setJudgeStatus("저장할 기록을 입력해주세요.", true);
       return;
     }
 
