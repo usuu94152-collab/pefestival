@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>관리자 — 체육 한마당 참가신청</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ── 로그인 오버레이 ──────────────────────────────────── -->
+  <div id="login-overlay" class="overlay">
+    <div class="overlay-card">
+      <h2>관리자 로그인</h2>
+      <p class="overlay-sub">관리자 비밀번호를 입력해주세요.</p>
+      <div class="field-group">
+        <label for="admin-password">비밀번호</label>
+        <input type="password" id="admin-password" placeholder="비밀번호 입력" autofocus />
+        <span class="field-error" id="login-error"></span>
+      </div>
+      <button class="btn btn-primary" id="login-btn">로그인</button>
+    </div>
+  </div>
+
+  <!-- ── 관리자 UI ─────────────────────────────────────────── -->
+  <div id="admin-ui" class="hidden">
+
+    <header class="site-header admin-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <span class="header-badge" id="admin-badge">관리자</span>
+          <h1 class="header-title" id="admin-title">체육 한마당 신청 현황</h1>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">로그아웃</button>
+      </div>
+    </header>
+
+    <div class="admin-container">
+
+      <!-- 통계 카드 -->
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card">
+          <span class="stat-value" id="stat-total">-</span>
+          <span class="stat-label">전체 신청 행</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-classes">-</span>
+          <span class="stat-label">신청 학급 수</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-participants">-</span>
+          <span class="stat-label">총 참가 인원</span>
+        </div>
+      </div>
+
+      <!-- 필터 카드 -->
+      <div class="card filter-card">
+        <div class="filter-row">
+          <div class="field-group">
+            <label for="filter-grade">학년</label>
+            <select id="filter-grade">
+              <option value="">전체</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="filter-class">반</label>
+            <select id="filter-class">
+              <option value="">전체</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="filter-event">종목</label>
+            <select id="filter-event">
+              <option value="">전체</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="filter-search">학생 이름 검색</label>
+            <input type="text" id="filter-search" placeholder="이름 입력" />
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-refresh">새로고침</button>
+          <button class="btn btn-success btn-sm" id="btn-export-csv">CSV 내보내기</button>
+          <span class="count-badge" id="filtered-count"></span>
+        </div>
+      </div>
+
+      <!-- 탭 (테이블 뷰 / 종목별 요약) -->
+      <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+        <button class="btn btn-primary btn-sm" id="tab-table" data-tab="table">목록 보기</button>
+        <button class="btn btn-secondary btn-sm" id="tab-summary" data-tab="summary">종목별 요약</button>
+      </div>
+
+      <!-- 테이블 뷰 -->
+      <div id="view-table">
+        <div class="card" style="padding:0; overflow:hidden;">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>등록일시</th>
+                  <th>학년</th>
+                  <th>반</th>
+                  <th>종목</th>
+                  <th>참가 학생</th>
+                </tr>
+              </thead>
+              <tbody id="table-body"></tbody>
+            </table>
+            <div id="table-empty" class="table-empty hidden">등록된 데이터가 없습니다.</div>
+            <div id="table-loading" class="table-loading">데이터를 불러오는 중...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 종목별 요약 뷰 -->
+      <div id="view-summary" class="hidden">
+        <div id="summary-cards"></div>
+      </div>
+
+    </div><!-- /admin-container -->
+
+  </div><!-- /admin-ui -->
+
+  <script src="js/config.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
