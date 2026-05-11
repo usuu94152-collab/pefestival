@@ -311,6 +311,17 @@
             </div>
           </div>
 
+          <div class="filter-row judge-form-grid hidden" id="judge-jump-count-row">
+            <div class="field-group">
+              <label for="judge-jump-class">학반</label>
+              <select id="judge-jump-class"></select>
+            </div>
+            <div class="field-group">
+              <label for="judge-jump-count">횟수</label>
+              <input type="number" id="judge-jump-count" min="0" step="1" placeholder="횟수 입력" />
+            </div>
+          </div>
+
           <div class="filter-row judge-form-grid hidden" id="judge-count-row">
             <div class="field-group">
               <label for="judge-count">득점 인원수</label>
@@ -399,6 +410,6 @@
   </div>
 
   <script src="js/config.js"></script>
-  <script src="js/day.js?v=20260511-jump-count"></script>
+  <script src="js/day.js?v=20260511-jump-single"></script>
 </body>
 </html>

@@ -1173,24 +1173,6 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
 .judge-rank-line.no-bonus {
   grid-template-columns: 110px minmax(120px, 1fr) 70px;
 }
-.judge-jump-line {
-  display: grid;
-  grid-template-columns: 110px minmax(140px, 1fr) 90px 70px;
-  gap: 0.6rem;
-  align-items: center;
-  padding: 0.75rem;
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: #fff;
-}
-.judge-jump-line input {
-  margin-bottom: 0;
-}
-.judge-jump-rank {
-  color: var(--color-secondary);
-  font-weight: 800;
-  text-align: center;
-}
 .judge-rank-label strong,
 .judge-rank-label span {
   display: block;
@@ -1319,16 +1301,11 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
   .judge-rank-line {
     grid-template-columns: 1fr 1fr;
   }
-  .judge-jump-line {
-    grid-template-columns: 1fr 1fr;
-  }
   .judge-rank-label,
   .judge-rank-line .judge-rank-bonus,
-  .judge-jump-rank,
   .judge-rank-score {
     grid-column: 1 / -1;
   }
-  .judge-jump-rank,
   .judge-rank-score {
     text-align: left;
   }

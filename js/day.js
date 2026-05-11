@@ -142,6 +142,9 @@
       "judge-single-class-row",
       "judge-count-row",
       "judge-count",
+      "judge-jump-count-row",
+      "judge-jump-class",
+      "judge-jump-count",
       "judge-parade-row",
       "judge-parade-options",
       "judge-parade-basic",
@@ -177,6 +180,8 @@
     CONFIG.grades.forEach(grade => addOption(els["judge-grade"], grade));
     addOption(els["judge-class"], "", "반 선택");
     CONFIG.classes.forEach(className => addOption(els["judge-class"], className));
+    addOption(els["judge-jump-class"], "", "반 선택");
+    CONFIG.classes.forEach(className => addOption(els["judge-jump-class"], className));
     syncJudgeGradeSelect();
     populateJudgeEventSelect();
     renderJudgeInputs();
@@ -242,6 +247,8 @@
   function resetJudgeEntryInputs() {
     els["judge-class"].value = "";
     els["judge-count"].value = "0";
+    els["judge-jump-class"].value = "";
+    els["judge-jump-count"].value = "";
     setParadeValue("basic");
   }
 
@@ -287,6 +294,8 @@
       "judge-event",
       "judge-class",
       "judge-count",
+      "judge-jump-class",
+      "judge-jump-count",
     ].forEach(id => {
       els[id].addEventListener("input", renderJudgeInputs);
       els[id].addEventListener("change", renderJudgeInputs);
@@ -744,24 +753,28 @@
       els["judge-rank-board"].classList.add("hidden");
       els["judge-single-class-row"].classList.add("hidden");
       els["judge-count-row"].classList.add("hidden");
+      els["judge-jump-count-row"].classList.add("hidden");
       els["judge-parade-row"].classList.add("hidden");
       els["judge-score-value"].textContent = "0";
       return;
     }
 
     els["judge-rule-note"].textContent = `${activeJudgeGrade} 기준 · ${rule.note}`;
-    els["judge-rank-board"].classList.toggle("hidden", !["rank", "jumpCount"].includes(rule.type));
+    els["judge-rank-board"].classList.toggle("hidden", rule.type !== "rank");
     els["judge-single-class-row"].classList.toggle("hidden", ["rank", "jumpCount"].includes(rule.type));
     els["judge-count-row"].classList.toggle("hidden", rule.type !== "count");
+    els["judge-jump-count-row"].classList.toggle("hidden", rule.type !== "jumpCount");
     els["judge-parade-row"].classList.toggle("hidden", rule.type !== "parade");
 
     if (rule.type === "rank") {
       renderRankBoard(rule);
-    } else if (rule.type === "jumpCount") {
-      renderJumpCountBoard(rule);
+    } else {
+      els["judge-rank-board"].innerHTML = "";
+      els["judge-rank-board"].dataset.ruleSignature = "";
     }
 
-    els["judge-score-value"].textContent = calculateJudgeScore().score;
+    const scoreData = calculateJudgeScore();
+    els["judge-score-value"].textContent = rule.type === "jumpCount" ? "자동" : scoreData.score;
   }
 
   function renderRankBoard(rule) {
@@ -801,37 +814,6 @@
     els["judge-rank-board"].dataset.ruleSignature = ruleSignature;
   }
 
-  function renderJumpCountBoard(rule) {
-    const ruleSignature = [
-      activeJudgeGrade,
-      els["judge-event"].value,
-      "jumpCount",
-      JSON.stringify(rule.scores),
-    ].join("|");
-    if (els["judge-rank-board"].dataset.ruleSignature === ruleSignature) return;
-
-    els["judge-rank-board"].innerHTML = CONFIG.classes.map(className => `
-      <div class="judge-jump-line" data-class="${escHtml(className)}">
-        <div class="judge-rank-label">
-          <strong>${escHtml(className)}</strong>
-          <span>${escHtml(activeJudgeGrade)}</span>
-        </div>
-        <input
-          type="number"
-          class="judge-jump-count"
-          data-class="${escHtml(className)}"
-          min="0"
-          step="1"
-          placeholder="횟수"
-          aria-label="${escHtml(activeJudgeGrade)} ${escHtml(className)} 줄넘기 횟수"
-        />
-        <div class="judge-jump-rank" data-class="${escHtml(className)}">-</div>
-        <div class="judge-rank-score" data-class="${escHtml(className)}">0점</div>
-      </div>
-    `).join("");
-    els["judge-rank-board"].dataset.ruleSignature = ruleSignature;
-  }
-
   function getRankEntries() {
     const rule = getSelectedScoreRule();
     if (!rule || rule.type !== "rank") return [];
@@ -865,61 +847,26 @@
     });
   }
 
-  function getJumpCountEntries() {
+  function getJumpCountEntry() {
     const rule = getSelectedScoreRule();
-    if (!rule || rule.type !== "jumpCount") return [];
+    if (!rule || rule.type !== "jumpCount") return null;
 
-    const rows = Array.from(els["judge-rank-board"].querySelectorAll(".judge-jump-line"));
-    const measured = rows
-      .map(row => {
-        const className = row.dataset.class || "";
-        const input = row.querySelector(".judge-jump-count");
-        const rawValue = input ? input.value.trim() : "";
-        const count = rawValue === "" ? null : Math.max(0, Number(rawValue || 0));
-        return { row, class: className, count, rawValue };
-      })
-      .filter(item => item.rawValue !== "" && !Number.isNaN(item.count));
+    const className = els["judge-jump-class"].value;
+    const rawValue = els["judge-jump-count"].value.trim();
+    const count = rawValue === "" ? null : Math.max(0, Number(rawValue || 0));
+    if (!className || rawValue === "" || Number.isNaN(count)) return null;
 
-    const sorted = measured
-      .slice()
-      .sort((a, b) => Number(b.count) - Number(a.count) || toNumber(a.class) - toNumber(b.class));
-
-    let previousCount = null;
-    let currentRank = 0;
-    sorted.forEach((item, index) => {
-      if (previousCount === null || item.count !== previousCount) {
-        currentRank = index + 1;
-        previousCount = item.count;
-      }
-      item.rank = currentRank;
-      item.score = Number(rule.scores[currentRank] || 0);
-    });
-
-    rows.forEach(row => {
-      row.querySelector(".judge-jump-rank").textContent = "-";
-      row.querySelector(".judge-rank-score").textContent = "0점";
-    });
-
-    sorted.forEach(item => {
-      const rankLabel = item.score > 0 ? `${item.rank}위` : "순위권 밖";
-      item.row.querySelector(".judge-jump-rank").textContent = rankLabel;
-      item.row.querySelector(".judge-rank-score").textContent = `${item.score}점`;
-    });
-
-    return sorted.map(item => {
-      const rankLabel = item.score > 0 ? `${item.rank}위` : "순위권 밖";
-      return {
-        event: els["judge-event"].value,
-        grade: activeJudgeGrade,
-        class: item.class,
-        recordType: "횟수",
-        rank: item.score > 0 ? String(item.rank) : "",
-        recordValue: `${item.count}회`,
-        recordLabel: `${item.count}회 · ${rankLabel}`,
-        bonus: false,
-        score: item.score,
-      };
-    });
+    return {
+      event: els["judge-event"].value,
+      grade: activeJudgeGrade,
+      class: className,
+      recordType: "횟수",
+      rank: "",
+      recordValue: `${count}회`,
+      recordLabel: `${count}회`,
+      bonus: false,
+      score: 0,
+    };
   }
 
   function getSelectedScoreRule() {
@@ -956,15 +903,16 @@
     }
 
     if (rule.type === "jumpCount") {
-      const entries = getJumpCountEntries();
+      const entry = getJumpCountEntry();
+      const entries = entry ? [entry] : [];
       return {
         event: eventName,
         recordType: "횟수",
         rank: "",
         recordValue: "",
         bonus: false,
-        score: entries.reduce((sum, entry) => sum + entry.score, 0),
-        recordLabel: `${entries.length}개 반 기록 입력`,
+        score: 0,
+        recordLabel: entry ? `${entry.class} ${entry.recordValue}` : "저장 후 자동 계산",
         entries,
       };
     }
