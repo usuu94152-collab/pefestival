@@ -630,9 +630,13 @@
   function renderStudentView() {
     const tbody = els["day-student-body"];
     const empty = els["day-student-empty"];
-    const entries = filterEntries(allEntries).sort(compareEntries);
+    const canShowStudents = hasStudentSearchCriteria();
+    const entries = canShowStudents ? filterEntries(allEntries).sort(compareEntries) : [];
 
     tbody.innerHTML = "";
+    empty.textContent = canShowStudents
+      ? "표시할 참가자가 없습니다."
+      : "검색어를 입력하거나 종목, 학년, 반을 선택하면 참가 학생이 표시됩니다.";
     empty.classList.toggle("hidden", entries.length !== 0);
 
     entries.forEach((entry, index) => {
@@ -648,7 +652,9 @@
       tbody.appendChild(tr);
     });
 
-    els["day-count-badge"].textContent = `${entries.length}명 표시 중`;
+    els["day-count-badge"].textContent = canShowStudents
+      ? `${entries.length}명 표시 중`
+      : "검색 후 표시";
   }
 
   function openJudgeArea() {
@@ -1262,6 +1268,11 @@
   }
 
   function exportCSV() {
+    if (currentView === "students" && !hasStudentSearchCriteria()) {
+      alert("학생 확인 탭에서는 검색어를 입력하거나 종목, 학년, 반을 선택한 뒤 내보낼 수 있습니다.");
+      return;
+    }
+
     const entries = filterEntries(allEntries);
     if (entries.length === 0) {
       alert("내보낼 데이터가 없습니다.");
@@ -1295,6 +1306,15 @@
 
   function hasActiveSearch() {
     return Boolean(
+      els["day-filter-grade"].value ||
+      els["day-filter-class"].value ||
+      getSearchQuery()
+    );
+  }
+
+  function hasStudentSearchCriteria() {
+    return Boolean(
+      els["day-filter-event"].value ||
       els["day-filter-grade"].value ||
       els["day-filter-class"].value ||
       getSearchQuery()
