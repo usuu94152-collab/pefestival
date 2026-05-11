@@ -9,7 +9,7 @@
   let allEntries = [];
   let scoreResults = [];
   let judgeScores = [];
-  let currentView = "events";
+  let currentView = "schedule";
   let activeEventName = "";
   let activeJudgeGrade = "";
   let judgePassword = "";
@@ -92,6 +92,7 @@
       "day-badge",
       "day-title",
       "day-subtitle",
+      "day-filter-row",
       "day-event-filter-field",
       "day-filter-event",
       "day-filter-grade",
@@ -111,9 +112,11 @@
       "day-stat-events",
       "day-stat-participants",
       "day-stat-updated",
+      "day-view-schedule",
       "day-view-events",
       "day-view-students",
       "day-view-results",
+      "day-tab-schedule",
       "day-tab-events",
       "day-tab-students",
       "day-tab-results",
@@ -310,7 +313,7 @@
       els[id].addEventListener("input", renderCurrentView);
     });
 
-    ["events", "students", "results", "judge"].forEach(view => {
+    ["schedule", "events", "students", "results", "judge"].forEach(view => {
       els[`day-tab-${view}`].addEventListener("click", () => switchView(view));
     });
   }
@@ -498,18 +501,18 @@
 
     currentView = view;
 
-    ["events", "students", "results", "judge"].forEach(item => {
+    ["schedule", "events", "students", "results", "judge"].forEach(item => {
       els[`day-view-${item}`].classList.toggle("hidden", item !== view);
       els[`day-tab-${item}`].className =
         item === view ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm";
     });
-    els["day-event-filter-field"].classList.toggle("hidden", view === "events");
+    updateControlVisibility();
 
     renderCurrentView();
   }
 
   function renderCurrentView() {
-    els["day-event-filter-field"].classList.toggle("hidden", currentView === "events");
+    updateControlVisibility();
     updateEventNavActive();
 
     if (currentView === "judge") {
@@ -519,9 +522,20 @@
       renderScoreResults();
     } else if (currentView === "students") {
       renderStudentView();
+    } else if (currentView === "schedule") {
+      renderScheduleView();
     } else {
       renderEventView();
     }
+  }
+
+  function updateControlVisibility() {
+    els["day-filter-row"].classList.toggle("hidden", currentView === "schedule");
+    els["day-event-filter-field"].classList.toggle("hidden", currentView === "events" || currentView === "schedule");
+  }
+
+  function renderScheduleView() {
+    els["day-count-badge"].textContent = "13개 일정";
   }
 
   function renderEventView() {

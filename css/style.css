@@ -1072,6 +1072,38 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
   padding: 0;
   overflow: hidden;
 }
+.schedule-card .table-wrapper {
+  overflow-x: auto;
+}
+.schedule-table {
+  min-width: 920px;
+  table-layout: fixed;
+  border: 1.5px solid #111827;
+  font-size: 0.88rem;
+}
+.schedule-table thead tr {
+  background: #E5E7EB;
+  color: #111827;
+}
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #111827;
+  padding: 0.62rem 0.5rem;
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+.schedule-table th:nth-child(1) { width: 4rem; }
+.schedule-table th:nth-child(2) { width: 8.5rem; }
+.schedule-table th:nth-child(3) { width: 13rem; }
+.schedule-table th:nth-child(4) { width: 11rem; }
+.schedule-table th:nth-child(5) { width: 6.2rem; }
+.schedule-table th:nth-child(6) { width: 5.8rem; }
+.schedule-table th:nth-child(7) { width: 11rem; }
+.schedule-table strong {
+  font-weight: 800;
+}
 .day-empty-card {
   color: var(--color-muted);
   text-align: center;
