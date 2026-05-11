@@ -119,11 +119,8 @@
       "day-tab-results",
       "day-tab-judge",
       "day-judge-open",
-      "score-result-updated",
       "score-summary-body",
       "score-summary-empty",
-      "score-detail-body",
-      "score-detail-empty",
       "day-view-judge",
       "judge-login-overlay",
       "judge-name",
@@ -160,10 +157,10 @@
 
   function populateHeader() {
     els["day-badge"].textContent = CONFIG.eventBadge || "운영";
-    els["day-title"].textContent = `${CONFIG.schoolName} ${CONFIG.eventTitle} 당일 운영`;
+    els["day-title"].textContent = `${CONFIG.schoolName} ${CONFIG.eventTitle} 정보 시스템`;
     els["day-subtitle"].textContent = [CONFIG.eventDate, CONFIG.eventLocation]
       .filter(Boolean)
-      .join(" · ");
+      .join(", ");
   }
 
   function populateFilters() {
@@ -1032,12 +1029,8 @@
     const scores = filterScoreResults(scoreResults);
     const summary = buildScoreSummary(scores);
 
-    els["score-result-updated"].textContent = scoreResults.length
-      ? `총 ${scoreResults.length}건 입력`
-      : "입력된 점수 없음";
-    els["day-count-badge"].textContent = `${scores.length}건 점수 기록`;
+    els["day-count-badge"].textContent = `${summary.length}개 학급 표시 중`;
     renderScoreSummary(summary);
-    renderScoreDetails(scores);
   }
 
   function filterScoreResults(scores) {
@@ -1072,15 +1065,11 @@
           grade: score.grade,
           class: score.class,
           total: 0,
-          count: 0,
-          latest: "",
         });
       }
 
       const item = map.get(key);
       item.total += Number(score.score || 0);
-      item.count += 1;
-      item.latest = score.timestamp || item.latest;
     });
 
     const summary = Array.from(map.values());
@@ -1122,27 +1111,6 @@
         <td>${escHtml(item.grade)}</td>
         <td>${escHtml(item.class)}</td>
         <td><strong class="score-total">${escHtml(item.total)}</strong></td>
-        <td>${escHtml(item.count)}</td>
-        <td>${escHtml(formatShortDate(item.latest || ""))}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  function renderScoreDetails(scores) {
-    const tbody = els["score-detail-body"];
-    const empty = els["score-detail-empty"];
-    tbody.innerHTML = "";
-    empty.classList.toggle("hidden", scores.length !== 0);
-
-    scores.slice().reverse().forEach(score => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td style="white-space:nowrap;">${escHtml(formatShortDate(score.timestamp || ""))}</td>
-        <td><strong>${escHtml(score.event || "")}</strong></td>
-        <td>${escHtml(classLabel(score))}</td>
-        <td>${escHtml(score.recordLabel || score.recordValue || "")}</td>
-        <td><strong>${escHtml(score.score || "0")}</strong></td>
       `;
       tbody.appendChild(tr);
     });

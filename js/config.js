@@ -8,7 +8,7 @@ const CONFIG = {
   schoolName: "대진고등학교",
   eventTitle: "사제동행 체육 한마당",
   eventBadge: "2026 ‘스포츠로 가르치는 인성교육’",
-  eventDate: "2026년 5월 15일",
+  eventDate: "2026년 5월 15일(금) 08:30~12:30",
   eventLocation: "학교 운동장",
 
   // ── Google Apps Script 배포 URL ───────────────────────────
