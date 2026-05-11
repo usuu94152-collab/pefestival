@@ -507,6 +507,8 @@ input:focus, select:focus, textarea:focus {
 .btn-primary:hover:not(:disabled)   { background: var(--color-primary-dk); }
 .btn-secondary { background: #e9ecef; color: var(--color-text); }
 .btn-secondary:hover:not(:disabled) { background: #dee2e6; }
+.btn-danger { background: var(--color-danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #C92F2F; }
 .btn-outline {
   background: transparent;
   border: 1.5px solid var(--color-border);
@@ -1196,6 +1198,10 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
 .judge-choice strong {
   color: var(--color-primary);
   font-size: 0.95rem;
+}
+.score-total {
+  color: var(--color-secondary);
+  font-size: 1.05rem;
 }
 .judge-score-panel {
   display: flex;

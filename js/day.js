@@ -7,6 +7,7 @@
 
   let allRecords = [];
   let allEntries = [];
+  let scoreResults = [];
   let judgeScores = [];
   let currentView = "events";
   let activeEventName = "";
@@ -112,10 +113,17 @@
       "day-stat-updated",
       "day-view-events",
       "day-view-students",
+      "day-view-results",
       "day-tab-events",
       "day-tab-students",
+      "day-tab-results",
       "day-tab-judge",
       "day-judge-open",
+      "score-result-updated",
+      "score-summary-body",
+      "score-summary-empty",
+      "score-detail-body",
+      "score-detail-empty",
       "day-view-judge",
       "judge-login-overlay",
       "judge-name",
@@ -266,6 +274,10 @@
     els["judge-logout-btn"].addEventListener("click", logoutJudge);
     els["judge-save-btn"].addEventListener("click", saveJudgeScore);
     els["judge-refresh-scores-btn"].addEventListener("click", loadJudgeScores);
+    els["judge-score-body"].addEventListener("click", event => {
+      const button = event.target.closest("[data-delete-score]");
+      if (button) deleteJudgeScore(button.dataset.deleteScore);
+    });
     els["judge-grade-tabs"].addEventListener("click", event => {
       const button = event.target.closest("[data-grade]");
       if (button) setJudgeGrade(button.dataset.grade);
@@ -301,7 +313,7 @@
       els[id].addEventListener("input", renderCurrentView);
     });
 
-    ["events", "students", "judge"].forEach(view => {
+    ["events", "students", "results", "judge"].forEach(view => {
       els[`day-tab-${view}`].addEventListener("click", () => switchView(view));
     });
   }
@@ -329,6 +341,7 @@
         allEntries = buildEntriesFromRecords(allRecords);
       }
 
+      await loadScoreResults();
       ensureActiveEvent();
       renderStats();
       renderEventNav();
@@ -362,6 +375,34 @@
 
     const res = await fetch(url.toString());
     return res.json();
+  }
+
+  async function loadScoreResults() {
+    try {
+      const json = await fetchAction("getScoreResults");
+      scoreResults = Array.isArray(json.data) ? normalizeScoreResults(json.data) : [];
+      if (scoreResults.length === 0 && isJudgeLoggedIn()) {
+        const judgeJson = await fetchActionWithParams("getJudgeScores", { password: judgePassword });
+        scoreResults = Array.isArray(judgeJson.data) ? normalizeScoreResults(judgeJson.data) : [];
+      }
+    } catch (err) {
+      scoreResults = [];
+    }
+  }
+
+  function normalizeScoreResults(records) {
+    return records.map(record => ({
+      timestamp: record.timestamp || "",
+      rowNumber: Number(record.rowNumber || 0),
+      event: String(record.event || ""),
+      grade: String(record.grade || ""),
+      class: String(record.class || ""),
+      recordLabel: String(record.recordLabel || record.recordValue || ""),
+      recordValue: String(record.recordValue || ""),
+      score: Number(record.score || 0),
+      judgeName: String(record.judgeName || ""),
+      memo: String(record.memo || ""),
+    }));
   }
 
   async function fetchActionWithParams(action, params) {
@@ -460,7 +501,7 @@
 
     currentView = view;
 
-    ["events", "students", "judge"].forEach(item => {
+    ["events", "students", "results", "judge"].forEach(item => {
       els[`day-view-${item}`].classList.toggle("hidden", item !== view);
       els[`day-tab-${item}`].className =
         item === view ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm";
@@ -477,6 +518,8 @@
     if (currentView === "judge") {
       renderJudgeInputs();
       renderJudgeScores();
+    } else if (currentView === "results") {
+      renderScoreResults();
     } else if (currentView === "students") {
       renderStudentView();
     } else {
@@ -897,6 +940,7 @@
       setJudgeStatus(`${activeJudgeGrade} ${scoreData.event} ${saveRows.length}건 저장 완료`, false);
       els["judge-memo"].value = "";
       await loadJudgeScores();
+      await loadScoreResults();
     } catch (err) {
       setJudgeStatus("점수 저장 중 오류가 발생했습니다.", true);
     } finally {
@@ -913,10 +957,47 @@
         setJudgeStatus(json.message || "점수 목록을 불러오지 못했습니다.", true);
         return;
       }
-      judgeScores = Array.isArray(json.data) ? json.data : [];
+      judgeScores = Array.isArray(json.data) ? normalizeScoreResults(json.data) : [];
+      scoreResults = judgeScores;
       renderJudgeScores();
+      if (currentView === "results") renderScoreResults();
     } catch (err) {
       setJudgeStatus("점수 목록을 불러오지 못했습니다.", true);
+    }
+  }
+
+  async function deleteJudgeScore(rowNumber) {
+    if (!isJudgeLoggedIn()) {
+      openJudgeLogin();
+      return;
+    }
+
+    const target = judgeScores.find(score => String(score.rowNumber) === String(rowNumber));
+    const label = target
+      ? `${classLabel(target)} ${target.event} ${target.recordLabel || target.recordValue || ""}`
+      : "선택한 점수 기록";
+
+    if (!rowNumber || !window.confirm(`${label}을(를) 삭제할까요?`)) return;
+
+    setJudgeStatus("삭제 중...", false);
+
+    try {
+      const json = await postAction({
+        action: "deleteJudgeScore",
+        password: judgePassword,
+        rowNumber,
+      });
+
+      if (!json.success) {
+        setJudgeStatus(json.message || "점수 기록을 삭제하지 못했습니다.", true);
+        return;
+      }
+
+      setJudgeStatus("점수 기록을 삭제했습니다.", false);
+      await loadJudgeScores();
+      await loadScoreResults();
+    } catch (err) {
+      setJudgeStatus("점수 기록 삭제 중 오류가 발생했습니다.", true);
     }
   }
 
@@ -937,6 +1018,131 @@
         <td>${escHtml(score.recordLabel || score.recordValue || "")}</td>
         <td><strong>${escHtml(score.score || "0")}</strong></td>
         <td>${escHtml(score.judgeName || "")}</td>
+        <td>
+          ${score.rowNumber
+            ? `<button class="btn btn-danger btn-sm" data-delete-score="${escHtml(score.rowNumber)}">삭제</button>`
+            : `<span class="day-muted">재배포 필요</span>`}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderScoreResults() {
+    const scores = filterScoreResults(scoreResults);
+    const summary = buildScoreSummary(scores);
+
+    els["score-result-updated"].textContent = scoreResults.length
+      ? `총 ${scoreResults.length}건 입력`
+      : "입력된 점수 없음";
+    els["day-count-badge"].textContent = `${scores.length}건 점수 기록`;
+    renderScoreSummary(summary);
+    renderScoreDetails(scores);
+  }
+
+  function filterScoreResults(scores) {
+    const selectedEvent = getSelectedEventFilter();
+    const selectedGrade = els["day-filter-grade"].value;
+    const selectedClass = els["day-filter-class"].value;
+    const keyword = els["day-filter-search"].value.trim().toLowerCase();
+
+    return scores.filter(score => {
+      if (selectedEvent && score.event !== selectedEvent) return false;
+      if (selectedGrade && score.grade !== selectedGrade) return false;
+      if (selectedClass && score.class !== selectedClass) return false;
+      if (!keyword) return true;
+
+      return [
+        score.event,
+        score.grade,
+        score.class,
+        score.recordLabel,
+        score.judgeName,
+        score.memo,
+      ].join(" ").toLowerCase().includes(keyword);
+    });
+  }
+
+  function buildScoreSummary(scores) {
+    const map = new Map();
+    scores.forEach(score => {
+      const key = classKey(score);
+      if (!map.has(key)) {
+        map.set(key, {
+          grade: score.grade,
+          class: score.class,
+          total: 0,
+          count: 0,
+          latest: "",
+        });
+      }
+
+      const item = map.get(key);
+      item.total += Number(score.score || 0);
+      item.count += 1;
+      item.latest = score.timestamp || item.latest;
+    });
+
+    const summary = Array.from(map.values());
+    summary.sort((a, b) =>
+      toNumber(a.grade) - toNumber(b.grade)
+      || Number(b.total) - Number(a.total)
+      || toNumber(a.class) - toNumber(b.class)
+    );
+
+    let currentGrade = "";
+    let rank = 0;
+    let previousTotal = null;
+    summary.forEach((item, index) => {
+      if (item.grade !== currentGrade) {
+        currentGrade = item.grade;
+        rank = 1;
+        previousTotal = item.total;
+      } else if (item.total !== previousTotal) {
+        rank += 1;
+        previousTotal = item.total;
+      }
+      item.rank = rank;
+      item.groupIndex = index;
+    });
+
+    return summary;
+  }
+
+  function renderScoreSummary(summary) {
+    const tbody = els["score-summary-body"];
+    const empty = els["score-summary-empty"];
+    tbody.innerHTML = "";
+    empty.classList.toggle("hidden", summary.length !== 0);
+
+    summary.forEach(item => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${escHtml(item.rank)}위</strong></td>
+        <td>${escHtml(item.grade)}</td>
+        <td>${escHtml(item.class)}</td>
+        <td><strong class="score-total">${escHtml(item.total)}</strong></td>
+        <td>${escHtml(item.count)}</td>
+        <td>${escHtml(formatShortDate(item.latest || ""))}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderScoreDetails(scores) {
+    const tbody = els["score-detail-body"];
+    const empty = els["score-detail-empty"];
+    tbody.innerHTML = "";
+    empty.classList.toggle("hidden", scores.length !== 0);
+
+    scores.slice().reverse().forEach(score => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td style="white-space:nowrap;">${escHtml(formatShortDate(score.timestamp || ""))}</td>
+        <td><strong>${escHtml(score.event || "")}</strong></td>
+        <td>${escHtml(classLabel(score))}</td>
+        <td>${escHtml(score.recordLabel || score.recordValue || "")}</td>
+        <td><strong>${escHtml(score.score || "0")}</strong></td>
       `;
       tbody.appendChild(tr);
     });

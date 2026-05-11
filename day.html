@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>당일 운영 | 체육대회 참가신청명단</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=20260511-score-delete" />
 </head>
 <body>
 
@@ -46,6 +46,7 @@
         <div class="day-tabs" role="tablist" aria-label="운영 화면 보기">
           <button class="btn btn-primary btn-sm" id="day-tab-events" data-view="events">종목별 소집</button>
           <button class="btn btn-secondary btn-sm" id="day-tab-students" data-view="students">학생 확인</button>
+          <button class="btn btn-secondary btn-sm" id="day-tab-results" data-view="results">점수 결과</button>
           <button class="btn btn-secondary btn-sm" id="day-tab-judge" data-view="judge">심판 입력</button>
         </div>
 
@@ -106,6 +107,52 @@
               <tbody id="day-student-body"></tbody>
             </table>
             <div id="day-student-empty" class="table-empty hidden">표시할 참가자가 없습니다.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="day-view-results" class="hidden">
+        <div class="card day-table-card">
+          <div class="judge-table-head">
+            <strong>학년별 종합 점수</strong>
+            <span class="day-muted" id="score-result-updated"></span>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>순위</th>
+                  <th>학년</th>
+                  <th>반</th>
+                  <th>총점</th>
+                  <th>입력 건수</th>
+                  <th>최근 기록</th>
+                </tr>
+              </thead>
+              <tbody id="score-summary-body"></tbody>
+            </table>
+            <div id="score-summary-empty" class="table-empty hidden">표시할 점수 결과가 없습니다.</div>
+          </div>
+        </div>
+
+        <div class="card day-table-card">
+          <div class="judge-table-head">
+            <strong>점수 입력 내역</strong>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>입력일시</th>
+                  <th>종목</th>
+                  <th>학급</th>
+                  <th>기록</th>
+                  <th>점수</th>
+                </tr>
+              </thead>
+              <tbody id="score-detail-body"></tbody>
+            </table>
+            <div id="score-detail-empty" class="table-empty hidden">표시할 입력 내역이 없습니다.</div>
           </div>
         </div>
       </section>
@@ -200,6 +247,7 @@
                   <th>기록</th>
                   <th>점수</th>
                   <th>심판</th>
+                  <th>관리</th>
                 </tr>
               </thead>
               <tbody id="judge-score-body"></tbody>
@@ -232,6 +280,6 @@
   </div>
 
   <script src="js/config.js"></script>
-  <script src="js/day.js"></script>
+  <script src="js/day.js?v=20260511-score-delete"></script>
 </body>
 </html>
