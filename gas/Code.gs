@@ -26,6 +26,9 @@ const ROSTER_SHEET_NAME        = "명렬";
 const SCORE_SHEET_NAME         = "점수기록";
 const ADMIN_PASSWORD           = "CHANGE_ME"; // ← Apps Script 배포 전 실제 비밀번호로 변경하세요
 const JUDGE_PASSWORD           = "CHANGE_ME"; // ← 심판 로그인 비밀번호로 변경하세요
+const JUMP_COUNT_EVENTS        = ["긴 줄넘기 (8자 마라톤)", "긴 줄넘기 (함께 뛰기)"];
+const JUMP_COUNT_SCORES        = { 1: 100, 2: 80, 3: 60 };
+const SPRINT_EVENT_NAME        = "단거리 달리기";
 
 // ── POST 핸들러: 참가신청 저장 ────────────────────────────
 function doPost(e) {
@@ -34,6 +37,10 @@ function doPost(e) {
 
     if (data.action === "saveJudgeScore") {
       return saveJudgeScore(data);
+    }
+
+    if (data.action === "deleteJudgeScore") {
+      return deleteJudgeScore(data);
     }
 
     if (!data.grade || !data.class) {
@@ -123,6 +130,11 @@ function doGet(e) {
     // 당일 운영 화면: 비밀번호 없는 읽기 전용 조회
     if (e.parameter.action === "getDayData") {
       return getDayData();
+    }
+
+    // 당일 운영 화면: 점수 결과 공개 조회
+    if (e.parameter.action === "getScoreResults") {
+      return getJudgeScoreData();
     }
 
     // 심판 로그인 확인
@@ -247,6 +259,22 @@ function saveJudgeScore(data) {
   const sheet = getOrCreateScoreSheet();
   const timestamp = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
+  if (isSprintScore(data)) {
+    upsertSprintScore(sheet, timestamp, data, score);
+    return buildResponse({ success: true, message: "단거리 달리기 점수가 저장되었습니다.", score: score });
+  }
+
+  if (isJumpCountScore(data)) {
+    const count = extractCountValue(data.recordValue);
+    if (isNaN(count)) {
+      return buildResponse({ success: false, message: "줄넘기 횟수 값이 올바르지 않습니다." });
+    }
+
+    upsertJumpCountScore(sheet, timestamp, data, count);
+    recalculateJumpCountScores(sheet, data.event, data.grade);
+    return buildResponse({ success: true, message: "줄넘기 기록이 저장되었습니다." });
+  }
+
   appendRows(sheet, [[
     timestamp,
     data.event,
@@ -265,6 +293,174 @@ function saveJudgeScore(data) {
   return buildResponse({ success: true, message: "점수가 저장되었습니다.", score: score });
 }
 
+function isJumpCountScore(data) {
+  return data.recordType === "횟수" && JUMP_COUNT_EVENTS.indexOf(data.event) !== -1;
+}
+
+function isJumpCountRow(row) {
+  return row && row[4] === "횟수" && JUMP_COUNT_EVENTS.indexOf(row[1]) !== -1;
+}
+
+function isSprintScore(data) {
+  return data.event === SPRINT_EVENT_NAME &&
+    (data.recordType === "조별 순위" || data.recordType === "기록 최우수");
+}
+
+function upsertSprintScore(sheet, timestamp, data, score) {
+  const rows = sheet.getDataRange().getValues();
+  let rowNumber = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    if (isSameSprintScoreRow(rows[i], data)) {
+      rowNumber = i + 1;
+      break;
+    }
+  }
+
+  const values = [
+    timestamp,
+    data.event,
+    data.grade,
+    data.class,
+    data.recordType || "",
+    data.rank || "",
+    data.recordValue || "",
+    data.recordLabel || "",
+    data.bonus === true ? "Y" : "N",
+    score,
+    data.judgeName || "",
+    data.memo || ""
+  ];
+
+  if (rowNumber > 0) {
+    sheet.getRange(rowNumber, 1, 1, values.length).setValues([values]);
+  } else {
+    appendRows(sheet, [values]);
+  }
+}
+
+function isSameSprintScoreRow(row, data) {
+  if (row[1] !== data.event || row[2] !== data.grade || row[4] !== data.recordType) return false;
+  if (data.recordType === "기록 최우수") return true;
+  return row[5] === data.rank && row[6] === data.recordValue;
+}
+
+function upsertJumpCountScore(sheet, timestamp, data, count) {
+  const rows = sheet.getDataRange().getValues();
+  let rowNumber = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    if (
+      rows[i][1] === data.event &&
+      rows[i][2] === data.grade &&
+      rows[i][3] === data.class &&
+      rows[i][4] === "횟수"
+    ) {
+      rowNumber = i + 1;
+      break;
+    }
+  }
+
+  const values = [
+    timestamp,
+    data.event,
+    data.grade,
+    data.class,
+    "횟수",
+    "",
+    `${count}회`,
+    `${count}회`,
+    "N",
+    0,
+    data.judgeName || "",
+    data.memo || ""
+  ];
+
+  if (rowNumber > 0) {
+    sheet.getRange(rowNumber, 1, 1, values.length).setValues([values]);
+  } else {
+    appendRows(sheet, [values]);
+  }
+}
+
+function recalculateJumpCountScores(sheet, eventName, grade) {
+  const rows = sheet.getDataRange().getValues();
+  const entries = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][1] !== eventName || rows[i][2] !== grade || rows[i][4] !== "횟수") continue;
+
+    const count = extractCountValue(rows[i][6]);
+    if (isNaN(count)) continue;
+
+    entries.push({
+      rowNumber: i + 1,
+      className: rows[i][3],
+      count: count
+    });
+  }
+
+  entries.sort((a, b) =>
+    b.count - a.count ||
+    extractClassNumber(a.className) - extractClassNumber(b.className)
+  );
+
+  let previousCount = null;
+  let currentRank = 0;
+
+  entries.forEach((entry, index) => {
+    if (previousCount === null || entry.count !== previousCount) {
+      currentRank = index + 1;
+      previousCount = entry.count;
+    }
+
+    const score = Number(JUMP_COUNT_SCORES[currentRank] || 0);
+    const rankLabel = score > 0 ? `${currentRank}위` : "순위권 밖";
+    const rankValue = score > 0 ? String(currentRank) : "";
+
+    sheet.getRange(entry.rowNumber, 6, 1, 5).setValues([[
+      rankValue,
+      `${entry.count}회`,
+      `${entry.count}회 · ${rankLabel}`,
+      "N",
+      score
+    ]]);
+  });
+}
+
+function extractCountValue(value) {
+  const match = String(value || "").match(/\d+/);
+  return match ? Number(match[0]) : NaN;
+}
+
+function extractClassNumber(value) {
+  const match = String(value || "").match(/\d+/);
+  return match ? Number(match[0]) : 999;
+}
+
+// ── 심판 점수 삭제 ─────────────────────────────────────────
+function deleteJudgeScore(data) {
+  if (data.password !== JUDGE_PASSWORD) {
+    return buildResponse({ success: false, message: "심판 비밀번호가 올바르지 않습니다." });
+  }
+
+  const rowNumber = Number(data.rowNumber);
+  const sheet = getOrCreateScoreSheet();
+
+  if (!rowNumber || rowNumber < 2 || rowNumber > sheet.getLastRow()) {
+    return buildResponse({ success: false, message: "삭제할 점수 기록을 찾지 못했습니다." });
+  }
+
+  const deletedRow = sheet.getRange(rowNumber, 1, 1, 12).getValues()[0];
+  sheet.deleteRow(rowNumber);
+
+  if (isJumpCountRow(deletedRow)) {
+    recalculateJumpCountScores(sheet, deletedRow[1], deletedRow[2]);
+  }
+
+  return buildResponse({ success: true, message: "점수 기록이 삭제되었습니다." });
+}
+
 // ── 심판 점수 조회 ─────────────────────────────────────────
 function getJudgeScoreData() {
   const sheet = getOrCreateScoreSheet();
@@ -274,7 +470,8 @@ function getJudgeScoreData() {
     return buildResponse({ success: true, data: [], total: 0 });
   }
 
-  const records = rows.slice(1).map(row => ({
+  const records = rows.slice(1).map((row, index) => ({
+    rowNumber:   index + 2,
     timestamp:   row[0],
     event:       row[1],
     grade:       row[2],

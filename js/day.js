@@ -17,12 +17,27 @@
 
   const els = {};
 
+  const SPRINT_GROUPS = {
+    "1학년": [
+      { gender: "여", group: "1조", classes: ["2반", "5반", "4반", "8반"] },
+      { gender: "여", group: "2조", classes: ["3반", "1반", "7반", "6반"] },
+      { gender: "남", group: "1조", classes: ["6반", "7반", "2반", "1반"] },
+      { gender: "남", group: "2조", classes: ["8반", "3반", "5반", "4반"] },
+    ],
+    "2학년": [
+      { gender: "여", group: "1조", classes: ["1반", "4반", "7반", "2반"] },
+      { gender: "여", group: "2조", classes: ["3반", "5반", "6반"] },
+      { gender: "남", group: "1조", classes: ["3반", "1반", "5반", "2반"] },
+      { gender: "남", group: "2조", classes: ["4반", "6반", "7반"] },
+    ],
+  };
+
   const SCORE_RULES = {
     "단거리 달리기": {
-      type: "rank",
-      scores: { 1: 50, 2: 40, 3: 30, 4: 30 },
+      type: "sprint",
+      scores: { 1: 50, 2: 40 },
       bonus: 20,
-      note: "1위 50점, 2위 40점, 3/4위 30점. 기록 최우수(조별 기준)는 20점 추가.",
+      note: "학년별·남녀별·조별 경기. 조별 1위 50점, 2위 40점. 전체 기록 최우수 1반은 20점 추가.",
     },
     "파도타기 릴레이": {
       type: "rank",
@@ -139,6 +154,11 @@
       "judge-class",
       "judge-rule-note",
       "judge-rank-board",
+      "judge-sprint-row",
+      "judge-sprint-group-field",
+      "judge-sprint-group",
+      "judge-sprint-entry",
+      "judge-sprint-class",
       "judge-single-class-row",
       "judge-count-row",
       "judge-count",
@@ -184,7 +204,17 @@
     CONFIG.classes.forEach(className => addOption(els["judge-jump-class"], className));
     syncJudgeGradeSelect();
     populateJudgeEventSelect();
+    populateSprintEntrySelect();
     renderJudgeInputs();
+  }
+
+  function populateSprintEntrySelect() {
+    els["judge-sprint-entry"].innerHTML = "";
+    [
+      { value: "rank1", label: "1위" },
+      { value: "rank2", label: "2위" },
+      { value: "best", label: "전체 기록 최우수" },
+    ].forEach(option => addOption(els["judge-sprint-entry"], option.value, option.label));
   }
 
   function renderJudgeGradeTabs() {
@@ -249,6 +279,9 @@
     els["judge-count"].value = "0";
     els["judge-jump-class"].value = "";
     els["judge-jump-count"].value = "";
+    els["judge-sprint-group"].value = "";
+    els["judge-sprint-entry"].value = "rank1";
+    els["judge-sprint-class"].value = "";
     setParadeValue("basic");
   }
 
@@ -266,6 +299,28 @@
     option.value = value;
     option.textContent = label || value;
     select.appendChild(option);
+  }
+
+  function replaceOptions(select, options, placeholder, preferredValue) {
+    const currentValue = preferredValue !== undefined ? preferredValue : select.value;
+    select.innerHTML = "";
+    if (placeholder) addOption(select, "", placeholder);
+    options.forEach(option => {
+      if (typeof option === "string") {
+        addOption(select, option);
+      } else {
+        addOption(select, option.value, option.label);
+      }
+    });
+
+    const values = Array.from(select.options).map(option => option.value);
+    if (values.includes(currentValue)) {
+      select.value = currentValue;
+    } else if (placeholder) {
+      select.value = "";
+    } else if (select.options.length > 0) {
+      select.selectedIndex = 0;
+    }
   }
 
   function bindEvents() {
@@ -296,6 +351,9 @@
       "judge-count",
       "judge-jump-class",
       "judge-jump-count",
+      "judge-sprint-group",
+      "judge-sprint-entry",
+      "judge-sprint-class",
     ].forEach(id => {
       els[id].addEventListener("input", renderJudgeInputs);
       els[id].addEventListener("change", renderJudgeInputs);
@@ -751,6 +809,7 @@
     if (!rule) {
       els["judge-rule-note"].textContent = "선택한 학년에 입력 가능한 종목이 없습니다.";
       els["judge-rank-board"].classList.add("hidden");
+      els["judge-sprint-row"].classList.add("hidden");
       els["judge-single-class-row"].classList.add("hidden");
       els["judge-count-row"].classList.add("hidden");
       els["judge-jump-count-row"].classList.add("hidden");
@@ -761,13 +820,18 @@
 
     els["judge-rule-note"].textContent = `${activeJudgeGrade} 기준 · ${rule.note}`;
     els["judge-rank-board"].classList.toggle("hidden", rule.type !== "rank");
-    els["judge-single-class-row"].classList.toggle("hidden", ["rank", "jumpCount"].includes(rule.type));
+    els["judge-sprint-row"].classList.toggle("hidden", rule.type !== "sprint");
+    els["judge-single-class-row"].classList.toggle("hidden", ["rank", "jumpCount", "sprint"].includes(rule.type));
     els["judge-count-row"].classList.toggle("hidden", rule.type !== "count");
     els["judge-jump-count-row"].classList.toggle("hidden", rule.type !== "jumpCount");
     els["judge-parade-row"].classList.toggle("hidden", rule.type !== "parade");
 
     if (rule.type === "rank") {
       renderRankBoard(rule);
+    } else if (rule.type === "sprint") {
+      renderSprintInputs(rule);
+      els["judge-rank-board"].innerHTML = "";
+      els["judge-rank-board"].dataset.ruleSignature = "";
     } else {
       els["judge-rank-board"].innerHTML = "";
       els["judge-rank-board"].dataset.ruleSignature = "";
@@ -814,6 +878,32 @@
     els["judge-rank-board"].dataset.ruleSignature = ruleSignature;
   }
 
+  function renderSprintInputs(rule) {
+    const groups = getSprintGroupsForGrade(activeJudgeGrade);
+    const groupOptions = groups.map(group => ({
+      value: getSprintGroupKey(group),
+      label: getSprintGroupLabel(group),
+    }));
+
+    replaceOptions(els["judge-sprint-group"], groupOptions, "성별/조 선택");
+    if (!els["judge-sprint-group"].value && groupOptions.length > 0) {
+      els["judge-sprint-group"].value = groupOptions[0].value;
+    }
+
+    const entryType = els["judge-sprint-entry"].value || "rank1";
+    const isBestRecord = entryType === "best";
+    els["judge-sprint-group-field"].classList.toggle("hidden", isBestRecord);
+
+    const selectedGroup = getSprintGroupByKey(activeJudgeGrade, els["judge-sprint-group"].value);
+    const classOptions = isBestRecord
+      ? getSprintClassesForGrade(activeJudgeGrade)
+      : (selectedGroup ? selectedGroup.classes : []);
+    replaceOptions(els["judge-sprint-class"], classOptions, "반 선택");
+
+    const scoreData = calculateSprintScore(rule);
+    els["judge-score-value"].textContent = scoreData.score;
+  }
+
   function getRankEntries() {
     const rule = getSelectedScoreRule();
     if (!rule || rule.type !== "rank") return [];
@@ -845,6 +935,77 @@
         score,
       };
     });
+  }
+
+  function getSprintGroupsForGrade(grade) {
+    return SPRINT_GROUPS[grade] || [];
+  }
+
+  function getSprintGroupKey(group) {
+    return `${group.gender}-${group.group}`;
+  }
+
+  function getSprintGroupLabel(group) {
+    return `${group.gender} ${group.group}`;
+  }
+
+  function getSprintGroupByKey(grade, key) {
+    return getSprintGroupsForGrade(grade).find(group => getSprintGroupKey(group) === key) || null;
+  }
+
+  function getSprintClassesForGrade(grade) {
+    const classSet = new Set();
+    getSprintGroupsForGrade(grade).forEach(group => {
+      group.classes.forEach(className => classSet.add(className));
+    });
+    return Array.from(classSet).sort((a, b) => toNumber(a) - toNumber(b));
+  }
+
+  function calculateSprintScore(rule) {
+    const entry = getSprintEntry(rule);
+    return {
+      entry,
+      score: entry ? entry.score : 0,
+    };
+  }
+
+  function getSprintEntry(rule) {
+    if (!rule || rule.type !== "sprint") return null;
+
+    const className = els["judge-sprint-class"].value;
+    const entryType = els["judge-sprint-entry"].value || "rank1";
+    if (!className) return null;
+
+    if (entryType === "best") {
+      return {
+        event: els["judge-event"].value,
+        grade: activeJudgeGrade,
+        class: className,
+        recordType: "기록 최우수",
+        rank: "",
+        recordValue: "전체",
+        recordLabel: `전체 기록 최우수 +${rule.bonus}점`,
+        bonus: true,
+        score: Number(rule.bonus || 0),
+      };
+    }
+
+    const group = getSprintGroupByKey(activeJudgeGrade, els["judge-sprint-group"].value);
+    if (!group || !group.classes.includes(className)) return null;
+
+    const rank = entryType === "rank2" ? "2" : "1";
+    const groupLabel = getSprintGroupLabel(group);
+    return {
+      event: els["judge-event"].value,
+      grade: activeJudgeGrade,
+      class: className,
+      recordType: "조별 순위",
+      rank,
+      recordValue: groupLabel,
+      recordLabel: `${groupLabel} ${rank}위`,
+      bonus: false,
+      score: Number(rule.scores[rank] || 0),
+    };
   }
 
   function getJumpCountEntry() {
@@ -898,6 +1059,21 @@
         bonus: entries.some(entry => entry.bonus),
         score: entries.reduce((sum, entry) => sum + entry.score, 0),
         recordLabel: `${entries.filter(entry => entry.grade && entry.class).length}개 순위 입력`,
+        entries,
+      };
+    }
+
+    if (rule.type === "sprint") {
+      const scoreData = calculateSprintScore(rule);
+      const entries = scoreData.entry ? [scoreData.entry] : [];
+      return {
+        event: eventName,
+        recordType: scoreData.entry ? scoreData.entry.recordType : "조별 순위",
+        rank: scoreData.entry ? scoreData.entry.rank : "",
+        recordValue: scoreData.entry ? scoreData.entry.recordValue : "",
+        bonus: Boolean(scoreData.entry && scoreData.entry.bonus),
+        score: scoreData.score,
+        recordLabel: scoreData.entry ? scoreData.entry.recordLabel : "",
         entries,
       };
     }
