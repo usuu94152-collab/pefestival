@@ -255,8 +255,6 @@
       "score-summary-body",
       "score-summary-empty",
       "work-summary-list",
-      "work-detail-body",
-      "work-empty",
       "work-reset-btn",
       "day-assembly-cards",
       "day-view-judge",
@@ -459,12 +457,6 @@
     els["judge-score-body"].addEventListener("click", event => {
       const button = event.target.closest("[data-delete-score]");
       if (button) deleteJudgeScore(button.dataset.deleteScore);
-    });
-    els["work-detail-body"].addEventListener("input", event => {
-      const input = event.target.closest("[data-work-duty-id]");
-      if (!input) return;
-      setWorkAssignment(input.dataset.workDutyId, input.value);
-      renderWorkSummary(filterWorkDuties(buildWorkDuties()));
     });
     els["work-summary-list"].addEventListener("click", event => {
       const button = event.target.closest("[data-work-teacher]");
@@ -745,7 +737,6 @@
   function renderWorkView() {
     const duties = filterWorkDuties(buildWorkDuties());
     renderWorkSummary(duties);
-    renderWorkDetails(duties);
     els["day-count-badge"].textContent = `${duties.length}개 업무 표시 중`;
   }
 
@@ -1031,49 +1022,6 @@
       duty.groupLabel,
       duty.className,
     ].filter(Boolean).join(" · ");
-  }
-
-  function renderWorkDetails(duties) {
-    const tbody = els["work-detail-body"];
-    const empty = els["work-empty"];
-    tbody.innerHTML = "";
-    empty.classList.toggle("hidden", duties.length !== 0);
-
-    duties.forEach(duty => {
-      const tr = document.createElement("tr");
-      const scopeLabel = duty.className
-        ? `${duty.groupLabel} · ${duty.className}`
-        : duty.groupLabel;
-      tr.innerHTML = `
-        <td>
-          <input
-            type="text"
-            class="work-teacher-input"
-            data-work-duty-id="${escHtml(duty.id)}"
-            value="${escHtml(duty.teacher)}"
-            placeholder="담당교사"
-          />
-        </td>
-        <td>${escHtml(pad(duty.eventOrder || getEventOrder(duty.eventName, 999)))}</td>
-        <td><strong>${escHtml(duty.eventName)}</strong></td>
-        <td>${escHtml(duty.grade)}</td>
-        <td>${escHtml(duty.gender)}</td>
-        <td>${escHtml(scopeLabel)}</td>
-        <td>${escHtml(duty.task)}</td>
-        <td>${escHtml(duty.scoreLabel)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  function setWorkAssignment(id, teacher) {
-    const value = String(teacher || "").trim();
-    if (value) {
-      workAssignments[id] = value;
-    } else {
-      delete workAssignments[id];
-    }
-    saveWorkAssignments();
   }
 
   function resetWorkAssignments() {

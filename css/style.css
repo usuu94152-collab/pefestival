@@ -1258,17 +1258,6 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
   font-size: 0.82rem;
   line-height: 1.5;
 }
-.work-detail-card {
-  margin-top: 1rem;
-}
-.work-table {
-  min-width: 980px;
-}
-.work-teacher-input {
-  min-width: 7.2rem;
-  margin-bottom: 0;
-  padding: 0.45rem 0.55rem;
-}
 .day-assembly-list {
   display: grid;
   gap: 1rem;
