@@ -12,6 +12,7 @@
   let currentView = "schedule";
   let activeEventName = "";
   let activeJudgeGrade = "";
+  let activeWorkTeacher = "";
   let judgePassword = "";
   let judgeName = "";
   let workAssignments = {};
@@ -465,6 +466,12 @@
       setWorkAssignment(input.dataset.workDutyId, input.value);
       renderWorkSummary(filterWorkDuties(buildWorkDuties()));
     });
+    els["work-summary-list"].addEventListener("click", event => {
+      const button = event.target.closest("[data-work-teacher]");
+      if (!button) return;
+      activeWorkTeacher = button.dataset.workTeacher;
+      renderWorkSummary(filterWorkDuties(buildWorkDuties()));
+    });
     els["work-reset-btn"].addEventListener("click", resetWorkAssignments);
     els["judge-grade-tabs"].addEventListener("click", event => {
       const button = event.target.closest("[data-grade]");
@@ -910,6 +917,39 @@
   }
 
   function renderWorkSummary(duties) {
+    const groups = groupWorkDutiesByTeacher(duties);
+    if (groups.length === 0) {
+      activeWorkTeacher = "";
+      els["work-summary-list"].innerHTML = `<div class="table-empty">표시할 업무가 없습니다.</div>`;
+      return;
+    }
+
+    if (!groups.some(group => group.teacher === activeWorkTeacher)) {
+      activeWorkTeacher = groups[0].teacher;
+    }
+
+    const activeGroup = groups.find(group => group.teacher === activeWorkTeacher) || groups[0];
+
+    els["work-summary-list"].innerHTML = `
+      <div class="work-teacher-tabs" role="tablist" aria-label="선생님별 업무">
+        ${groups.map(group => `
+          <button
+            type="button"
+            class="work-teacher-tab${group.teacher === activeGroup.teacher ? " active" : ""}${group.teacher === "미배정" ? " unassigned" : ""}"
+            data-work-teacher="${escHtml(group.teacher)}"
+            role="tab"
+            aria-selected="${group.teacher === activeGroup.teacher ? "true" : "false"}"
+          >
+            <span>${escHtml(group.teacher)}</span>
+            <strong>${group.items.length}</strong>
+          </button>
+        `).join("")}
+      </div>
+      ${renderWorkTeacherPanel(activeGroup)}
+    `;
+  }
+
+  function groupWorkDutiesByTeacher(duties) {
     const groups = new Map();
     duties.forEach(duty => {
       const teacher = String(duty.teacher || "").trim() || "미배정";
@@ -917,20 +957,80 @@
       groups.get(teacher).push(duty);
     });
 
-    els["work-summary-list"].innerHTML = Array.from(groups.entries())
-      .sort((a, b) => (a[0] === "미배정" ? 1 : b[0] === "미배정" ? -1 : a[0].localeCompare(b[0], "ko")))
-      .map(([teacher, items]) => `
-        <section class="work-summary-card${teacher === "미배정" ? " unassigned" : ""}">
-          <div class="work-summary-head">
-            <strong>${escHtml(teacher)}</strong>
-            <span>${items.length}개 업무</span>
+    return Array.from(groups.entries())
+      .map(([teacher, items]) => ({ teacher, items }))
+      .sort((a, b) => (a.teacher === "미배정" ? 1 : b.teacher === "미배정" ? -1 : a.teacher.localeCompare(b.teacher, "ko")));
+  }
+
+  function renderWorkTeacherPanel(group) {
+    const eventGroups = groupWorkDutiesByEvent(group.items);
+    const avatar = group.teacher === "미배정" ? "미" : group.teacher.slice(0, 1);
+
+    return `
+      <article class="work-teacher-panel">
+        <div class="work-teacher-profile">
+          <div class="work-teacher-avatar">${escHtml(avatar)}</div>
+          <div>
+            <strong>${escHtml(group.teacher)}${group.teacher === "미배정" ? "" : " 선생님"}</strong>
+            <span>${group.items.length}개 심판 역할</span>
           </div>
-          <ul>
-            ${items.slice(0, 4).map(item => `<li>${escHtml(getWorkDutyShortLabel(item))}</li>`).join("")}
-            ${items.length > 4 ? `<li>외 ${items.length - 4}개</li>` : ""}
-          </ul>
-        </section>
-      `).join("");
+        </div>
+        <div class="work-teacher-event-list">
+          ${eventGroups.map(eventGroup => `
+            <section class="work-duty-event-card">
+              <div class="work-duty-event-head">
+                <span>${escHtml(pad(eventGroup.eventOrder))}</span>
+                <div>
+                  <strong>${escHtml(eventGroup.eventName)}</strong>
+                  <em>${eventGroup.items.length}개 역할</em>
+                </div>
+              </div>
+              <ul>
+                ${eventGroup.items.map(item => `
+                  <li>
+                    <div>
+                      <strong>${escHtml(item.task)}</strong>
+                      <span>${escHtml(getWorkDutyScopeLabel(item))}</span>
+                    </div>
+                    <em>${escHtml(item.scoreLabel)}</em>
+                  </li>
+                `).join("")}
+              </ul>
+            </section>
+          `).join("")}
+        </div>
+      </article>
+    `;
+  }
+
+  function groupWorkDutiesByEvent(duties) {
+    const groups = new Map();
+    duties.forEach(duty => {
+      if (!groups.has(duty.eventName)) {
+        groups.set(duty.eventName, {
+          eventName: duty.eventName,
+          eventOrder: duty.eventOrder || getEventOrder(duty.eventName, 999),
+          items: [],
+        });
+      }
+      groups.get(duty.eventName).items.push(duty);
+    });
+
+    return Array.from(groups.values())
+      .sort((a, b) => a.eventOrder - b.eventOrder)
+      .map(group => ({
+        ...group,
+        items: group.items.sort(compareWorkDuties),
+      }));
+  }
+
+  function getWorkDutyScopeLabel(duty) {
+    return [
+      duty.grade,
+      duty.gender !== "전체" ? duty.gender : "",
+      duty.groupLabel,
+      duty.className,
+    ].filter(Boolean).join(" · ");
   }
 
   function renderWorkDetails(duties) {
@@ -1003,17 +1103,6 @@
   function getGroupRankWorkEventNames() {
     const names = new Set(["단거리 달리기", ...Object.keys(GROUP_RACE_GROUPS)]);
     return CONFIG.events.map(event => event.name).filter(eventName => names.has(eventName));
-  }
-
-  function getWorkDutyShortLabel(duty) {
-    return [
-      duty.eventName,
-      duty.grade,
-      duty.gender !== "전체" ? duty.gender : "",
-      duty.groupLabel,
-      duty.className,
-      duty.task,
-    ].filter(Boolean).join(" · ");
   }
 
   function workDutyMatchesQuery(duty, query) {

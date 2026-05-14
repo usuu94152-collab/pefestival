@@ -1069,10 +1069,163 @@ tbody tr:nth-child(even):hover { background: #EBF1FE; }
   margin-top: 0.5rem;
 }
 .work-summary-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
   padding: 1rem 1.25rem;
+}
+.work-teacher-tabs {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.work-teacher-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  padding: 0.55rem 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.work-teacher-tab strong {
+  min-width: 1.4rem;
+  border-radius: 999px;
+  background: #EEF2F7;
+  color: var(--color-muted);
+  padding: 0.12rem 0.38rem;
+  font-size: 0.78rem;
+}
+.work-teacher-tab.active {
+  border-color: var(--color-secondary);
+  background: var(--color-secondary);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.work-teacher-tab.active strong {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.work-teacher-tab.unassigned {
+  color: #9A3412;
+}
+.work-teacher-tab.unassigned.active {
+  border-color: #C2410C;
+  background: #C2410C;
+  color: #fff;
+}
+.work-teacher-panel {
+  display: grid;
+  gap: 1rem;
+}
+.work-teacher-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #F8FAFD;
+}
+.work-teacher-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  color: #fff;
+  font-weight: 900;
+}
+.work-teacher-profile strong {
+  display: block;
+  color: var(--color-secondary);
+  font-size: 1.05rem;
+}
+.work-teacher-profile span {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--color-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.work-teacher-event-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 0.75rem;
+}
+.work-duty-event-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  padding: 0.9rem;
+}
+.work-duty-event-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.work-duty-event-head > span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.45rem;
+  background: var(--color-secondary);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+.work-duty-event-head strong {
+  display: block;
+  color: var(--color-secondary);
+}
+.work-duty-event-head em {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--color-muted);
+  font-style: normal;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.work-duty-event-card ul {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.work-duty-event-card li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.work-duty-event-card li strong {
+  display: block;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+.work-duty-event-card li span {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.work-duty-event-card li em {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+  font-style: normal;
+  font-size: 0.82rem;
+  font-weight: 900;
 }
 .work-summary-card {
   border: 1px solid var(--color-border);
