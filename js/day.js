@@ -279,7 +279,6 @@
       "score-summary-body",
       "score-summary-empty",
       "work-summary-list",
-      "work-reset-btn",
       "day-assembly-cards",
       "day-view-judge",
       "judge-login-overlay",
@@ -488,7 +487,6 @@
       activeWorkTeacher = button.dataset.workTeacher;
       renderWorkSummary(filterWorkDuties(buildWorkDuties()));
     });
-    els["work-reset-btn"].addEventListener("click", resetWorkAssignments);
     els["judge-grade-tabs"].addEventListener("click", event => {
       const button = event.target.closest("[data-grade]");
       if (button) setJudgeGrade(button.dataset.grade);
@@ -1049,13 +1047,6 @@
       duty.groupLabel,
       duty.className,
     ].filter(Boolean).join(" · ");
-  }
-
-  function resetWorkAssignments() {
-    if (!window.confirm("업무 분장 담당교사 입력값을 기본 배정으로 되돌릴까요?")) return;
-    workAssignments = { ...DEFAULT_WORK_ASSIGNMENTS };
-    saveWorkAssignments();
-    renderWorkView();
   }
 
   function loadWorkAssignments() {
