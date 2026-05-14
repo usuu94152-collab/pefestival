@@ -18,6 +18,7 @@
   const els = {};
 
   const EXCLUDED_SCORE_EVENTS = ["테마 퍼레이드"];
+  const UNGROUPED_ASSEMBLY_EVENTS = ["긴 줄넘기 (8자 마라톤)", "긴 줄넘기 (함께 뛰기)", "2인3각 / 4인5각"];
 
   const SPRINT_GROUPS = {
     "1학년": [
@@ -684,6 +685,7 @@
             grade,
             gender: group.gender || "전체",
             groupLabel: group.group,
+            ungrouped: Boolean(group.ungrouped),
             groupIndex,
             rows,
           });
@@ -728,7 +730,7 @@
     card.innerHTML = `
       <div class="day-event-head day-assembly-head">
         <div>
-          <div class="card-label">진행 ${pad(section.eventOrder)} · ${section.groupIndex + 1}</div>
+          <div class="card-label">${section.ungrouped ? `진행 ${pad(section.eventOrder)}` : `진행 ${pad(section.eventOrder)} · ${section.groupIndex + 1}`}</div>
           <h2 class="day-event-title">${escHtml(section.eventName)}</h2>
           <div class="day-event-meta">
             <span>${escHtml(section.grade)}</span>
@@ -1109,19 +1111,37 @@
   }
 
   function getAssemblyEventNames() {
-    const names = new Set(["단거리 달리기", ...Object.keys(GROUP_RACE_GROUPS)]);
+    const names = new Set(["단거리 달리기", ...Object.keys(GROUP_RACE_GROUPS), ...UNGROUPED_ASSEMBLY_EVENTS]);
     return CONFIG.events
       .map(event => event.name)
       .filter(eventName => names.has(eventName));
   }
 
   function getGroupRaceGrades(eventName) {
+    if (UNGROUPED_ASSEMBLY_EVENTS.includes(eventName)) {
+      const event = getEventConfig(eventName);
+      return event && Array.isArray(event.allowedGrades) ? event.allowedGrades : CONFIG.grades;
+    }
     return CONFIG.grades.filter(grade => getGroupRaceGroupsForEventGrade(eventName, grade).length > 0);
   }
 
   function getGroupRaceGroupsForEventGrade(eventName, grade) {
     if (eventName === "단거리 달리기") return SPRINT_GROUPS[grade] || [];
+    if (UNGROUPED_ASSEMBLY_EVENTS.includes(eventName)) {
+      const classes = getAssemblyClassesForEventGrade(eventName, grade);
+      return classes.length > 0 ? [{ group: "조 구분 없음", classes, ungrouped: true }] : [];
+    }
     return GROUP_RACE_GROUPS[eventName] ? GROUP_RACE_GROUPS[eventName][grade] || [] : [];
+  }
+
+  function getAssemblyClassesForEventGrade(eventName, grade) {
+    const classSet = new Set(
+      allEntries
+        .filter(entry => entry.event === eventName && entry.grade === grade)
+        .map(entry => entry.class)
+        .filter(Boolean)
+    );
+    return Array.from(classSet).sort((a, b) => toNumber(a) - toNumber(b));
   }
 
   function getSprintGroupKey(group) {
