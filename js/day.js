@@ -32,6 +32,21 @@
     ],
   };
 
+  const GROUP_RACE_GROUPS = {
+    "파도타기 릴레이": {
+      "1학년": [
+        { group: "1조", classes: ["6반", "3반", "1반", "8반"] },
+        { group: "2조", classes: ["2반", "4반", "5반", "7반"] },
+      ],
+    },
+    "태풍의 눈": {
+      "2학년": [
+        { group: "1조", classes: ["4반", "2반", "1반"] },
+        { group: "2조", classes: ["3반", "5반", "6반", "7반"] },
+      ],
+    },
+  };
+
   const SCORE_RULES = {
     "단거리 달리기": {
       type: "sprint",
@@ -40,16 +55,18 @@
       note: "학년별·남녀별·조별 경기. 조별 1위 50점, 2위 40점. 전체 기록 최우수 1반은 20점 추가.",
     },
     "파도타기 릴레이": {
-      type: "rank",
+      type: "sprint",
       scores: { 1: 120, 2: 100 },
       bonus: 30,
-      note: "1위 120점, 2위 100점. 기록 최우수(조별 기준)는 30점 추가.",
+      groupLabel: "조",
+      note: "조별 경기. 조별 1위 120점, 2위 100점. 전체 기록 최우수 1반은 30점 추가.",
     },
     "태풍의 눈": {
-      type: "rank",
+      type: "sprint",
       scores: { 1: 120, 2: 100 },
       bonus: 30,
-      note: "1위 120점, 2위 100점. 기록 최우수(조별 기준)는 30점 추가.",
+      groupLabel: "조",
+      note: "조별 경기. 조별 1위 120점, 2위 100점. 전체 기록 최우수 1반은 30점 추가.",
     },
     "줄다리기": {
       type: "rank",
@@ -879,13 +896,17 @@
   }
 
   function renderSprintInputs(rule) {
+    const groupLabel = rule.groupLabel || "성별/조";
+    const groupLabelEl = els["judge-sprint-group-field"].querySelector("label");
+    if (groupLabelEl) groupLabelEl.textContent = groupLabel;
+
     const groups = getSprintGroupsForGrade(activeJudgeGrade);
     const groupOptions = groups.map(group => ({
       value: getSprintGroupKey(group),
       label: getSprintGroupLabel(group),
     }));
 
-    replaceOptions(els["judge-sprint-group"], groupOptions, "성별/조 선택");
+    replaceOptions(els["judge-sprint-group"], groupOptions, `${groupLabel} 선택`);
     if (!els["judge-sprint-group"].value && groupOptions.length > 0) {
       els["judge-sprint-group"].value = groupOptions[0].value;
     }
@@ -938,15 +959,19 @@
   }
 
   function getSprintGroupsForGrade(grade) {
+    const eventName = els["judge-event"].value;
+    if (GROUP_RACE_GROUPS[eventName]) {
+      return GROUP_RACE_GROUPS[eventName][grade] || [];
+    }
     return SPRINT_GROUPS[grade] || [];
   }
 
   function getSprintGroupKey(group) {
-    return `${group.gender}-${group.group}`;
+    return [group.gender, group.group].filter(Boolean).join("-");
   }
 
   function getSprintGroupLabel(group) {
-    return `${group.gender} ${group.group}`;
+    return [group.gender, group.group].filter(Boolean).join(" ");
   }
 
   function getSprintGroupByKey(grade, key) {

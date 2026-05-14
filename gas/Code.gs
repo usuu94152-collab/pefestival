@@ -28,7 +28,7 @@ const ADMIN_PASSWORD           = "CHANGE_ME"; // ← Apps Script 배포 전 실�
 const JUDGE_PASSWORD           = "CHANGE_ME"; // ← 심판 로그인 비밀번호로 변경하세요
 const JUMP_COUNT_EVENTS        = ["긴 줄넘기 (8자 마라톤)", "긴 줄넘기 (함께 뛰기)"];
 const JUMP_COUNT_SCORES        = { 1: 100, 2: 80, 3: 60 };
-const SPRINT_EVENT_NAME        = "단거리 달리기";
+const GROUP_RANK_EVENTS        = ["단거리 달리기", "파도타기 릴레이", "태풍의 눈"];
 
 // ── POST 핸들러: 참가신청 저장 ────────────────────────────
 function doPost(e) {
@@ -259,9 +259,9 @@ function saveJudgeScore(data) {
   const sheet = getOrCreateScoreSheet();
   const timestamp = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 
-  if (isSprintScore(data)) {
-    upsertSprintScore(sheet, timestamp, data, score);
-    return buildResponse({ success: true, message: "단거리 달리기 점수가 저장되었습니다.", score: score });
+  if (isGroupRankScore(data)) {
+    upsertGroupRankScore(sheet, timestamp, data, score);
+    return buildResponse({ success: true, message: "조별 경기 점수가 저장되었습니다.", score: score });
   }
 
   if (isJumpCountScore(data)) {
@@ -301,17 +301,17 @@ function isJumpCountRow(row) {
   return row && row[4] === "횟수" && JUMP_COUNT_EVENTS.indexOf(row[1]) !== -1;
 }
 
-function isSprintScore(data) {
-  return data.event === SPRINT_EVENT_NAME &&
+function isGroupRankScore(data) {
+  return GROUP_RANK_EVENTS.indexOf(data.event) !== -1 &&
     (data.recordType === "조별 순위" || data.recordType === "기록 최우수");
 }
 
-function upsertSprintScore(sheet, timestamp, data, score) {
+function upsertGroupRankScore(sheet, timestamp, data, score) {
   const rows = sheet.getDataRange().getValues();
   let rowNumber = 0;
 
   for (let i = 1; i < rows.length; i++) {
-    if (isSameSprintScoreRow(rows[i], data)) {
+    if (isSameGroupRankScoreRow(rows[i], data)) {
       rowNumber = i + 1;
       break;
     }
@@ -339,7 +339,7 @@ function upsertSprintScore(sheet, timestamp, data, score) {
   }
 }
 
-function isSameSprintScoreRow(row, data) {
+function isSameGroupRankScoreRow(row, data) {
   if (row[1] !== data.event || row[2] !== data.grade || row[4] !== data.recordType) return false;
   if (data.recordType === "기록 최우수") return true;
   return row[5] === data.rank && row[6] === data.recordValue;
