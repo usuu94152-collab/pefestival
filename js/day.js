@@ -17,6 +17,8 @@
 
   const els = {};
 
+  const EXCLUDED_SCORE_EVENTS = ["테마 퍼레이드"];
+
   const SPRINT_GROUPS = {
     "1학년": [
       { gender: "여", group: "1조", classes: ["2반", "5반", "4반", "8반"] },
@@ -110,11 +112,6 @@
       multiplier: 10,
       max: 120,
       note: "득점 인원수 × 10점. 최대 120점.",
-    },
-    "테마 퍼레이드": {
-      type: "parade",
-      scores: { basic: 50, best: 100 },
-      note: "기본 점수 50점, 우수 학급 100점.",
     },
   };
 
@@ -1325,6 +1322,7 @@
     const keyword = els["day-filter-search"].value.trim().toLowerCase();
 
     return scores.filter(score => {
+      if (EXCLUDED_SCORE_EVENTS.includes(score.event)) return false;
       if (selectedEvent && score.event !== selectedEvent) return false;
       if (selectedGrade && score.grade !== selectedGrade) return false;
       if (selectedClass && score.class !== selectedClass) return false;
