@@ -154,10 +154,12 @@
       "day-stat-participants",
       "day-stat-updated",
       "day-view-schedule",
+      "day-view-assembly",
       "day-view-events",
       "day-view-students",
       "day-view-results",
       "day-tab-schedule",
+      "day-tab-assembly",
       "day-tab-events",
       "day-tab-students",
       "day-tab-results",
@@ -165,6 +167,7 @@
       "day-judge-open",
       "score-summary-body",
       "score-summary-empty",
+      "day-assembly-cards",
       "day-view-judge",
       "judge-login-overlay",
       "judge-name",
@@ -406,7 +409,7 @@
       els[id].addEventListener("input", renderCurrentView);
     });
 
-    ["schedule", "events", "students", "results", "judge"].forEach(view => {
+    ["schedule", "assembly", "events", "students", "results", "judge"].forEach(view => {
       els[`day-tab-${view}`].addEventListener("click", () => switchView(view));
     });
   }
@@ -594,7 +597,7 @@
 
     currentView = view;
 
-    ["schedule", "events", "students", "results", "judge"].forEach(item => {
+    ["schedule", "assembly", "events", "students", "results", "judge"].forEach(item => {
       els[`day-view-${item}`].classList.toggle("hidden", item !== view);
       els[`day-tab-${item}`].className =
         item === view ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm";
@@ -617,6 +620,8 @@
       renderStudentView();
     } else if (currentView === "schedule") {
       renderScheduleView();
+    } else if (currentView === "assembly") {
+      renderAssemblyView();
     } else {
       renderEventView();
     }
@@ -629,6 +634,137 @@
 
   function renderScheduleView() {
     els["day-count-badge"].textContent = "13개 일정";
+  }
+
+  function renderAssemblyView() {
+    const container = els["day-assembly-cards"];
+    const sections = buildAssemblySections();
+    container.innerHTML = "";
+
+    if (sections.length === 0) {
+      container.innerHTML = `<div class="card day-empty-card">표시할 선수 소집 명단이 없습니다.</div>`;
+      els["day-count-badge"].textContent = "0명 소집 표시 중";
+      return;
+    }
+
+    sections.forEach(section => {
+      container.appendChild(buildAssemblyCard(section));
+    });
+
+    const participantCount = sections.reduce((sum, section) =>
+      sum + section.rows.reduce((rowSum, row) => rowSum + row.entries.length, 0),
+      0
+    );
+    els["day-count-badge"].textContent = `${participantCount}명 소집 표시 중`;
+  }
+
+  function buildAssemblySections() {
+    const selectedEvent = els["day-filter-event"].value;
+    const selectedGrade = els["day-filter-grade"].value;
+    const selectedClass = els["day-filter-class"].value;
+    const query = getSearchQuery();
+    const events = getAssemblyEventNames().filter(eventName => !selectedEvent || eventName === selectedEvent);
+    const sections = [];
+
+    events.forEach(eventName => {
+      getGroupRaceGrades(eventName).forEach(grade => {
+        if (selectedGrade && grade !== selectedGrade) return;
+
+        getGroupRaceGroupsForEventGrade(eventName, grade).forEach((group, groupIndex) => {
+          const rows = group.classes
+            .filter(className => !selectedClass || className === selectedClass)
+            .map(className => buildAssemblyClassRow(eventName, grade, group, className, query))
+            .filter(Boolean);
+
+          if (rows.length === 0) return;
+
+          sections.push({
+            eventName,
+            eventOrder: getEventOrder(eventName, 999),
+            grade,
+            gender: group.gender || "전체",
+            groupLabel: group.group,
+            groupIndex,
+            rows,
+          });
+        });
+      });
+    });
+
+    return sections;
+  }
+
+  function buildAssemblyClassRow(eventName, grade, group, className, query) {
+    const groupText = getSprintGroupLabel(group);
+    const metaText = [eventName, grade, group.gender || "전체", group.group, className, `${grade} ${className}`]
+      .join(" ")
+      .toLowerCase();
+    const entries = allEntries
+      .filter(entry =>
+        entry.event === eventName &&
+        entry.grade === grade &&
+        entry.class === className &&
+        (!group.gender || entry.gender === group.gender)
+      )
+      .sort(compareEntries);
+    const metaMatches = query && metaText.includes(query);
+    const visibleEntries = query && !metaMatches
+      ? entries.filter(entry => entryMatchesQuery(entry, query) || groupText.toLowerCase().includes(query))
+      : entries;
+
+    if (query && !metaMatches && visibleEntries.length === 0) return null;
+
+    return {
+      className,
+      label: `${grade} ${className}`,
+      entries: visibleEntries,
+    };
+  }
+
+  function buildAssemblyCard(section) {
+    const card = document.createElement("article");
+    card.className = "card day-assembly-card";
+
+    card.innerHTML = `
+      <div class="day-event-head day-assembly-head">
+        <div>
+          <div class="card-label">진행 ${pad(section.eventOrder)} · ${section.groupIndex + 1}</div>
+          <h2 class="day-event-title">${escHtml(section.eventName)}</h2>
+          <div class="day-event-meta">
+            <span>${escHtml(section.grade)}</span>
+            <span>성별 ${escHtml(section.gender)}</span>
+            <span>${escHtml(section.groupLabel)}</span>
+          </div>
+        </div>
+        <div class="day-event-count">
+          <strong>${section.rows.reduce((sum, row) => sum + row.entries.length, 0)}</strong>
+          <span>${section.rows.length}학급</span>
+        </div>
+      </div>
+      <div class="day-assembly-grid">
+        ${section.rows.map(row => `
+          <section class="day-assembly-class">
+            <div class="day-class-title">
+              <strong>${escHtml(row.label)}</strong>
+              <span>${row.entries.length}명</span>
+            </div>
+            ${row.entries.length > 0 ? `
+              <div class="day-participant-grid">
+                ${row.entries.map(entry => `
+                  <span class="day-participant-pill">
+                    ${entry.role ? `<em>${escHtml(entry.role)}</em>` : ""}
+                    ${entry.gender ? `<small>${escHtml(entry.gender)}</small>` : ""}
+                    ${escHtml(entry.studentName)}
+                  </span>
+                `).join("")}
+              </div>
+            ` : `<p class="day-muted">명단 없음</p>`}
+          </section>
+        `).join("")}
+      </div>
+    `;
+
+    return card;
   }
 
   function renderEventView() {
@@ -969,10 +1105,23 @@
 
   function getSprintGroupsForGrade(grade) {
     const eventName = els["judge-event"].value;
-    if (GROUP_RACE_GROUPS[eventName]) {
-      return GROUP_RACE_GROUPS[eventName][grade] || [];
-    }
-    return SPRINT_GROUPS[grade] || [];
+    return getGroupRaceGroupsForEventGrade(eventName, grade);
+  }
+
+  function getAssemblyEventNames() {
+    const names = new Set(["단거리 달리기", ...Object.keys(GROUP_RACE_GROUPS)]);
+    return CONFIG.events
+      .map(event => event.name)
+      .filter(eventName => names.has(eventName));
+  }
+
+  function getGroupRaceGrades(eventName) {
+    return CONFIG.grades.filter(grade => getGroupRaceGroupsForEventGrade(eventName, grade).length > 0);
+  }
+
+  function getGroupRaceGroupsForEventGrade(eventName, grade) {
+    if (eventName === "단거리 달리기") return SPRINT_GROUPS[grade] || [];
+    return GROUP_RACE_GROUPS[eventName] ? GROUP_RACE_GROUPS[eventName][grade] || [] : [];
   }
 
   function getSprintGroupKey(group) {
