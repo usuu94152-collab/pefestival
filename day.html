@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>정보 시스템 | 체육대회 참가신청명단</title>
-  <link rel="stylesheet" href="css/style.css?v=20260514-assembly" />
+  <link rel="stylesheet" href="css/style.css?v=20260514-work" />
 </head>
 <body>
 
@@ -45,6 +45,7 @@
       <section class="card filter-card day-control-panel">
         <div class="day-tabs" role="tablist" aria-label="운영 화면 보기">
           <button class="btn btn-primary btn-sm" id="day-tab-schedule" data-view="schedule">대회일정표</button>
+          <button class="btn btn-secondary btn-sm" id="day-tab-work" data-view="work">업무 분장</button>
           <button class="btn btn-secondary btn-sm" id="day-tab-assembly" data-view="assembly">선수 소집</button>
           <button class="btn btn-secondary btn-sm" id="day-tab-events" data-view="events">학급별 확인</button>
           <button class="btn btn-secondary btn-sm" id="day-tab-students" data-view="students">학생 확인</button>
@@ -232,6 +233,40 @@
       <section id="day-view-events" class="hidden">
         <div class="day-event-nav" id="day-event-nav"></div>
         <div id="day-event-cards"></div>
+      </section>
+
+      <section id="day-view-work" class="hidden">
+        <div class="card day-table-card">
+          <div class="judge-table-head">
+            <strong>선생님별 업무 분장</strong>
+            <button class="btn btn-secondary btn-sm" id="work-reset-btn">배정 초기화</button>
+          </div>
+          <div id="work-summary-list" class="work-summary-list"></div>
+        </div>
+
+        <div class="card day-table-card work-detail-card">
+          <div class="judge-table-head">
+            <strong>세부 기록 입력 업무</strong>
+          </div>
+          <div class="table-wrapper">
+            <table class="work-table">
+              <thead>
+                <tr>
+                  <th>담당교사</th>
+                  <th>진행</th>
+                  <th>종목</th>
+                  <th>학년</th>
+                  <th>성별</th>
+                  <th>조/학급</th>
+                  <th>입력 업무</th>
+                  <th>점수</th>
+                </tr>
+              </thead>
+              <tbody id="work-detail-body"></tbody>
+            </table>
+            <div id="work-empty" class="table-empty hidden">표시할 업무가 없습니다.</div>
+          </div>
+        </div>
       </section>
 
       <section id="day-view-assembly" class="hidden">
@@ -430,6 +465,6 @@
   </div>
 
   <script src="js/config.js"></script>
-  <script src="js/day.js?v=20260514-sprint-best-gender"></script>
+  <script src="js/day.js?v=20260514-work"></script>
 </body>
 </html>

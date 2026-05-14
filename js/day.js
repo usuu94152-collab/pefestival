@@ -14,11 +14,13 @@
   let activeJudgeGrade = "";
   let judgePassword = "";
   let judgeName = "";
+  let workAssignments = {};
 
   const els = {};
 
   const EXCLUDED_SCORE_EVENTS = ["테마 퍼레이드"];
   const UNGROUPED_ASSEMBLY_EVENTS = ["긴 줄넘기 (8자 마라톤)", "긴 줄넘기 (함께 뛰기)", "2인3각 / 4인5각"];
+  const WORK_ASSIGNMENT_STORAGE_KEY = "pefestival-work-assignments-v1";
 
   const SPRINT_GROUPS = {
     "1학년": [
@@ -120,6 +122,7 @@
 
   function init() {
     cacheElements();
+    workAssignments = loadWorkAssignments();
     activeJudgeGrade = CONFIG.grades[0] || "";
     populateHeader();
     populateFilters();
@@ -155,11 +158,13 @@
       "day-stat-participants",
       "day-stat-updated",
       "day-view-schedule",
+      "day-view-work",
       "day-view-assembly",
       "day-view-events",
       "day-view-students",
       "day-view-results",
       "day-tab-schedule",
+      "day-tab-work",
       "day-tab-assembly",
       "day-tab-events",
       "day-tab-students",
@@ -168,6 +173,10 @@
       "day-judge-open",
       "score-summary-body",
       "score-summary-empty",
+      "work-summary-list",
+      "work-detail-body",
+      "work-empty",
+      "work-reset-btn",
       "day-assembly-cards",
       "day-view-judge",
       "judge-login-overlay",
@@ -370,6 +379,13 @@
       const button = event.target.closest("[data-delete-score]");
       if (button) deleteJudgeScore(button.dataset.deleteScore);
     });
+    els["work-detail-body"].addEventListener("input", event => {
+      const input = event.target.closest("[data-work-duty-id]");
+      if (!input) return;
+      setWorkAssignment(input.dataset.workDutyId, input.value);
+      renderWorkSummary(filterWorkDuties(buildWorkDuties()));
+    });
+    els["work-reset-btn"].addEventListener("click", resetWorkAssignments);
     els["judge-grade-tabs"].addEventListener("click", event => {
       const button = event.target.closest("[data-grade]");
       if (button) setJudgeGrade(button.dataset.grade);
@@ -410,7 +426,7 @@
       els[id].addEventListener("input", renderCurrentView);
     });
 
-    ["schedule", "assembly", "events", "students", "results", "judge"].forEach(view => {
+    ["schedule", "work", "assembly", "events", "students", "results", "judge"].forEach(view => {
       els[`day-tab-${view}`].addEventListener("click", () => switchView(view));
     });
   }
@@ -598,7 +614,7 @@
 
     currentView = view;
 
-    ["schedule", "assembly", "events", "students", "results", "judge"].forEach(item => {
+    ["schedule", "work", "assembly", "events", "students", "results", "judge"].forEach(item => {
       els[`day-view-${item}`].classList.toggle("hidden", item !== view);
       els[`day-tab-${item}`].className =
         item === view ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm";
@@ -615,6 +631,8 @@
     if (currentView === "judge") {
       renderJudgeInputs();
       renderJudgeScores();
+    } else if (currentView === "work") {
+      renderWorkView();
     } else if (currentView === "results") {
       renderScoreResults();
     } else if (currentView === "students") {
@@ -635,6 +653,323 @@
 
   function renderScheduleView() {
     els["day-count-badge"].textContent = "13개 일정";
+  }
+
+  function renderWorkView() {
+    const duties = filterWorkDuties(buildWorkDuties());
+    renderWorkSummary(duties);
+    renderWorkDetails(duties);
+    els["day-count-badge"].textContent = `${duties.length}개 업무 표시 중`;
+  }
+
+  function buildWorkDuties() {
+    const duties = [];
+    buildGroupRankWorkDuties(duties);
+    buildStandardRankWorkDuties(duties);
+    buildJumpCountWorkDuties(duties);
+    buildCountWorkDuties(duties);
+
+    return duties
+      .map(duty => ({
+        ...duty,
+        teacher: workAssignments[duty.id] || "",
+      }))
+      .sort(compareWorkDuties);
+  }
+
+  function buildGroupRankWorkDuties(duties) {
+    getGroupRankWorkEventNames().forEach(eventName => {
+      const rule = SCORE_RULES[eventName];
+      if (!rule) return;
+
+      getGroupRaceGrades(eventName).forEach(grade => {
+        const groups = getGroupRaceGroupsForEventGrade(eventName, grade);
+        groups.forEach((group, groupIndex) => {
+          Object.keys(rule.scores).forEach(rank => {
+            duties.push(createWorkDuty({
+              eventName,
+              grade,
+              gender: group.gender || "전체",
+              groupLabel: getSprintGroupLabel(group),
+              groupIndex,
+              classes: group.classes,
+              rank,
+              task: `${rank}위 기록 입력`,
+              scoreLabel: `${rule.scores[rank]}점`,
+            }));
+          });
+        });
+
+        if (!Number(rule.bonus || 0)) return;
+
+        if (eventName === "단거리 달리기") {
+          getSprintGendersForGrade(grade).forEach(gender => {
+            duties.push(createWorkDuty({
+              eventName,
+              grade,
+              gender,
+              groupLabel: "전체",
+              groupIndex: 99,
+              classes: getSprintClassesForGender(grade, gender),
+              rank: "best",
+              task: `${gender} 기록 최우수 입력`,
+              scoreLabel: `+${rule.bonus}점`,
+            }));
+          });
+        } else {
+          duties.push(createWorkDuty({
+            eventName,
+            grade,
+            gender: "전체",
+            groupLabel: "전체",
+            groupIndex: 99,
+            classes: uniqueClassesFromGroups(groups),
+            rank: "best",
+            task: "전체 기록 최우수 입력",
+            scoreLabel: `+${rule.bonus}점`,
+          }));
+        }
+      });
+    });
+  }
+
+  function buildStandardRankWorkDuties(duties) {
+    ["줄다리기", "2인3각 / 4인5각"].forEach(eventName => {
+      const rule = SCORE_RULES[eventName];
+      if (!rule || rule.type !== "rank") return;
+
+      getAllowedGradesForEvent(eventName).forEach(grade => {
+        Object.keys(rule.scores).forEach(rank => {
+          duties.push(createWorkDuty({
+            eventName,
+            grade,
+            gender: "전체",
+            groupLabel: "순위",
+            groupIndex: 0,
+            classes: CONFIG.classes,
+            rank,
+            task: `${rank}위 기록 입력`,
+            scoreLabel: `${rule.scores[rank]}점`,
+          }));
+        });
+      });
+    });
+  }
+
+  function buildJumpCountWorkDuties(duties) {
+    ["긴 줄넘기 (8자 마라톤)", "긴 줄넘기 (함께 뛰기)"].forEach(eventName => {
+      if (!SCORE_RULES[eventName]) return;
+
+      getAllowedGradesForEvent(eventName).forEach(grade => {
+        CONFIG.classes.forEach(className => {
+          duties.push(createWorkDuty({
+            eventName,
+            grade,
+            gender: "전체",
+            groupLabel: "조 구분 없음",
+            groupIndex: 0,
+            className,
+            classes: [className],
+            rank: "count",
+            task: "횟수 기록 입력",
+            scoreLabel: "자동 산정",
+          }));
+        });
+      });
+    });
+  }
+
+  function buildCountWorkDuties(duties) {
+    const eventName = "사제동행 가위바위보 릴레이";
+    if (!SCORE_RULES[eventName]) return;
+
+    getAllowedGradesForEvent(eventName).forEach(grade => {
+      CONFIG.classes.forEach(className => {
+        duties.push(createWorkDuty({
+          eventName,
+          grade,
+          gender: "전체",
+          groupLabel: "학급별",
+          groupIndex: 0,
+          className,
+          classes: [className],
+          rank: "count",
+          task: "득점 인원수 입력",
+          scoreLabel: "인원×10점",
+        }));
+      });
+    });
+  }
+
+  function createWorkDuty(duty) {
+    const id = [
+      duty.eventName,
+      duty.grade,
+      duty.gender,
+      duty.groupLabel,
+      duty.className || "",
+      duty.rank,
+      duty.task,
+    ].join("|");
+    return { id, ...duty };
+  }
+
+  function filterWorkDuties(duties) {
+    const selectedEvent = els["day-filter-event"].value;
+    const selectedGrade = els["day-filter-grade"].value;
+    const selectedClass = els["day-filter-class"].value;
+    const query = getSearchQuery();
+
+    return duties.filter(duty => {
+      if (selectedEvent && duty.eventName !== selectedEvent) return false;
+      if (selectedGrade && duty.grade !== selectedGrade) return false;
+      if (selectedClass && !(duty.classes || []).includes(selectedClass)) return false;
+      if (query && !workDutyMatchesQuery(duty, query)) return false;
+      return true;
+    });
+  }
+
+  function renderWorkSummary(duties) {
+    const groups = new Map();
+    duties.forEach(duty => {
+      const teacher = String(duty.teacher || "").trim() || "미배정";
+      if (!groups.has(teacher)) groups.set(teacher, []);
+      groups.get(teacher).push(duty);
+    });
+
+    els["work-summary-list"].innerHTML = Array.from(groups.entries())
+      .sort((a, b) => (a[0] === "미배정" ? 1 : b[0] === "미배정" ? -1 : a[0].localeCompare(b[0], "ko")))
+      .map(([teacher, items]) => `
+        <section class="work-summary-card${teacher === "미배정" ? " unassigned" : ""}">
+          <div class="work-summary-head">
+            <strong>${escHtml(teacher)}</strong>
+            <span>${items.length}개 업무</span>
+          </div>
+          <ul>
+            ${items.slice(0, 4).map(item => `<li>${escHtml(getWorkDutyShortLabel(item))}</li>`).join("")}
+            ${items.length > 4 ? `<li>외 ${items.length - 4}개</li>` : ""}
+          </ul>
+        </section>
+      `).join("");
+  }
+
+  function renderWorkDetails(duties) {
+    const tbody = els["work-detail-body"];
+    const empty = els["work-empty"];
+    tbody.innerHTML = "";
+    empty.classList.toggle("hidden", duties.length !== 0);
+
+    duties.forEach(duty => {
+      const tr = document.createElement("tr");
+      const scopeLabel = duty.className
+        ? `${duty.groupLabel} · ${duty.className}`
+        : duty.groupLabel;
+      tr.innerHTML = `
+        <td>
+          <input
+            type="text"
+            class="work-teacher-input"
+            data-work-duty-id="${escHtml(duty.id)}"
+            value="${escHtml(duty.teacher)}"
+            placeholder="담당교사"
+          />
+        </td>
+        <td>${escHtml(pad(duty.eventOrder || getEventOrder(duty.eventName, 999)))}</td>
+        <td><strong>${escHtml(duty.eventName)}</strong></td>
+        <td>${escHtml(duty.grade)}</td>
+        <td>${escHtml(duty.gender)}</td>
+        <td>${escHtml(scopeLabel)}</td>
+        <td>${escHtml(duty.task)}</td>
+        <td>${escHtml(duty.scoreLabel)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function setWorkAssignment(id, teacher) {
+    const value = String(teacher || "").trim();
+    if (value) {
+      workAssignments[id] = value;
+    } else {
+      delete workAssignments[id];
+    }
+    saveWorkAssignments();
+  }
+
+  function resetWorkAssignments() {
+    if (!window.confirm("업무 분장 담당교사 입력값을 모두 지울까요?")) return;
+    workAssignments = {};
+    saveWorkAssignments();
+    renderWorkView();
+  }
+
+  function loadWorkAssignments() {
+    try {
+      return JSON.parse(window.localStorage.getItem(WORK_ASSIGNMENT_STORAGE_KEY) || "{}") || {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function saveWorkAssignments() {
+    try {
+      window.localStorage.setItem(WORK_ASSIGNMENT_STORAGE_KEY, JSON.stringify(workAssignments));
+    } catch (err) {
+      // localStorage가 막힌 환경에서는 화면 입력만 유지합니다.
+    }
+  }
+
+  function getGroupRankWorkEventNames() {
+    const names = new Set(["단거리 달리기", ...Object.keys(GROUP_RACE_GROUPS)]);
+    return CONFIG.events.map(event => event.name).filter(eventName => names.has(eventName));
+  }
+
+  function getWorkDutyShortLabel(duty) {
+    return [
+      duty.eventName,
+      duty.grade,
+      duty.gender !== "전체" ? duty.gender : "",
+      duty.groupLabel,
+      duty.className,
+      duty.task,
+    ].filter(Boolean).join(" · ");
+  }
+
+  function workDutyMatchesQuery(duty, query) {
+    return [
+      duty.teacher,
+      duty.eventName,
+      duty.grade,
+      duty.gender,
+      duty.groupLabel,
+      duty.className,
+      duty.task,
+      duty.scoreLabel,
+    ].some(value => String(value || "").toLowerCase().includes(query));
+  }
+
+  function compareWorkDuties(a, b) {
+    return getEventOrder(a.eventName, 999) - getEventOrder(b.eventName, 999)
+      || toNumber(a.grade) - toNumber(b.grade)
+      || String(a.gender || "").localeCompare(String(b.gender || ""), "ko")
+      || Number(a.groupIndex || 0) - Number(b.groupIndex || 0)
+      || getWorkRankOrder(a.rank) - getWorkRankOrder(b.rank)
+      || toNumber(a.className) - toNumber(b.className)
+      || String(a.task || "").localeCompare(String(b.task || ""), "ko");
+  }
+
+  function getWorkRankOrder(rank) {
+    if (rank === "best") return 90;
+    if (rank === "count") return 100;
+    return Number(rank || 0);
+  }
+
+  function uniqueClassesFromGroups(groups) {
+    const classSet = new Set();
+    groups.forEach(group => {
+      (group.classes || []).forEach(className => classSet.add(className));
+    });
+    return Array.from(classSet).sort((a, b) => toNumber(a) - toNumber(b));
   }
 
   function renderAssemblyView() {
@@ -1806,6 +2141,11 @@
 
   function getEventConfig(eventName) {
     return CONFIG.events.find(event => event.name === eventName);
+  }
+
+  function getAllowedGradesForEvent(eventName) {
+    const event = getEventConfig(eventName);
+    return event && Array.isArray(event.allowedGrades) ? event.allowedGrades : CONFIG.grades;
   }
 
   function getEventOrder(eventName, fallbackIndex) {
