@@ -28,7 +28,7 @@ const ADMIN_PASSWORD           = "CHANGE_ME"; // ← Apps Script 배포 전 실�
 const JUDGE_PASSWORD           = "CHANGE_ME"; // ← 심판 로그인 비밀번호로 변경하세요
 const JUMP_COUNT_EVENTS        = ["긴 줄넘기 (8자 마라톤)", "긴 줄넘기 (함께 뛰기)"];
 const JUMP_COUNT_SCORES        = { 1: 100, 2: 80, 3: 60 };
-const GROUP_RANK_EVENTS        = ["단거리 달리기", "파도타기 릴레이", "태풍의 눈"];
+const GROUP_RANK_EVENTS        = ["단거리 달리기", "파도타기 릴레이", "태풍의 눈", "이어 달리기"];
 
 // ── POST 핸들러: 참가신청 저장 ────────────────────────────
 function doPost(e) {
