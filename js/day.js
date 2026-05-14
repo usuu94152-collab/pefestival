@@ -752,6 +752,9 @@
   function updateControlVisibility() {
     els["day-filter-row"].classList.toggle("hidden", currentView === "schedule");
     els["day-event-filter-field"].classList.toggle("hidden", currentView === "events" || currentView === "schedule");
+    els["day-filter-search"].placeholder = currentView === "work"
+      ? "선생님, 종목, 업무"
+      : "학생, 학급, 종목";
   }
 
   function renderScheduleView() {
@@ -1078,8 +1081,10 @@
   }
 
   function workDutyMatchesQuery(duty, query) {
+    const teacher = String(duty.teacher || "");
     return [
-      duty.teacher,
+      teacher,
+      teacher ? `${teacher} 선생님` : "",
       duty.eventName,
       duty.grade,
       duty.gender,
@@ -1087,7 +1092,7 @@
       duty.className,
       duty.task,
       duty.scoreLabel,
-    ].some(value => String(value || "").toLowerCase().includes(query));
+    ].some(value => matchesSearchText(value, query));
   }
 
   function compareWorkDuties(a, b) {
@@ -2133,6 +2138,13 @@
       record.participants,
       classLabel(record),
     ].some(value => String(value || "").toLowerCase().includes(query));
+  }
+
+  function matchesSearchText(value, query) {
+    const text = String(value || "").toLowerCase();
+    const compactText = text.replace(/\s+/g, "");
+    const compactQuery = String(query || "").replace(/\s+/g, "");
+    return text.includes(query) || (compactQuery && compactText.includes(compactQuery));
   }
 
   function groupEntriesByClass(entries) {
