@@ -17,7 +17,7 @@ const CONFIG = {
 
   // ── 학년 / 반 목록 ────────────────────────────────────────
   grades: ["1학년", "2학년"],
-  classes: Array.from({ length: 10 }, (_, i) => `${i + 1}반`),
+  classes: Array.from({ length: 8 }, (_, i) => `${i + 1}반`),
 
   // ── 안내 문구 (HTML 가능) ─────────────────────────────────
   introText: `
