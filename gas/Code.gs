@@ -261,6 +261,7 @@ function saveJudgeScore(data) {
 
   if (isGroupRankScore(data)) {
     upsertGroupRankScore(sheet, timestamp, data, score);
+    cleanupLegacySprintBestScores(sheet, data);
     return buildResponse({ success: true, message: "조별 경기 점수가 저장되었습니다.", score: score });
   }
 
@@ -341,8 +342,30 @@ function upsertGroupRankScore(sheet, timestamp, data, score) {
 
 function isSameGroupRankScoreRow(row, data) {
   if (row[1] !== data.event || row[2] !== data.grade || row[4] !== data.recordType) return false;
-  if (data.recordType === "기록 최우수") return true;
+  if (data.recordType === "기록 최우수") return row[6] === data.recordValue;
   return row[5] === data.rank && row[6] === data.recordValue;
+}
+
+function cleanupLegacySprintBestScores(sheet, data) {
+  if (
+    data.event !== "단거리 달리기" ||
+    data.recordType !== "기록 최우수" ||
+    data.recordValue === "전체"
+  ) {
+    return;
+  }
+
+  const rows = sheet.getDataRange().getValues();
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (
+      rows[i][1] === data.event &&
+      rows[i][2] === data.grade &&
+      rows[i][4] === "기록 최우수" &&
+      rows[i][6] === "전체"
+    ) {
+      sheet.deleteRow(i + 1);
+    }
+  }
 }
 
 function upsertJumpCountScore(sheet, timestamp, data, count) {

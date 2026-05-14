@@ -65,7 +65,7 @@
       type: "sprint",
       scores: { 1: 50, 2: 40 },
       bonus: 20,
-      note: "학년별·남녀별·조별 경기. 조별 1위 50점, 2위 40점. 전체 기록 최우수 1반은 20점 추가.",
+      note: "학년별·남녀별·조별 경기. 조별 1위 50점, 2위 40점. 학년/성별별 기록 최우수 1반은 20점 추가.",
     },
     "파도타기 릴레이": {
       type: "sprint",
@@ -1043,28 +1043,34 @@
   }
 
   function renderSprintInputs(rule) {
-    const groupLabel = rule.groupLabel || "성별/조";
+    const eventName = els["judge-event"].value;
+    const entryType = els["judge-sprint-entry"].value || "rank1";
+    const isBestRecord = entryType === "best";
+    const isGenderBestRecord = isBestRecord && eventName === "단거리 달리기";
+    const groupLabel = isGenderBestRecord ? "성별" : (rule.groupLabel || "성별/조");
     const groupLabelEl = els["judge-sprint-group-field"].querySelector("label");
     if (groupLabelEl) groupLabelEl.textContent = groupLabel;
 
     const groups = getSprintGroupsForGrade(activeJudgeGrade);
-    const groupOptions = groups.map(group => ({
-      value: getSprintGroupKey(group),
-      label: getSprintGroupLabel(group),
-    }));
+    const groupOptions = isGenderBestRecord
+      ? getSprintGendersForGrade(activeJudgeGrade).map(gender => ({ value: gender, label: gender }))
+      : groups.map(group => ({
+        value: getSprintGroupKey(group),
+        label: getSprintGroupLabel(group),
+      }));
 
     replaceOptions(els["judge-sprint-group"], groupOptions, `${groupLabel} 선택`);
     if (!els["judge-sprint-group"].value && groupOptions.length > 0) {
       els["judge-sprint-group"].value = groupOptions[0].value;
     }
 
-    const entryType = els["judge-sprint-entry"].value || "rank1";
-    const isBestRecord = entryType === "best";
-    els["judge-sprint-group-field"].classList.toggle("hidden", isBestRecord);
+    els["judge-sprint-group-field"].classList.toggle("hidden", isBestRecord && !isGenderBestRecord);
 
     const selectedGroup = getSprintGroupByKey(activeJudgeGrade, els["judge-sprint-group"].value);
     const classOptions = isBestRecord
-      ? getSprintClassesForGrade(activeJudgeGrade)
+      ? (isGenderBestRecord
+        ? getSprintClassesForGender(activeJudgeGrade, els["judge-sprint-group"].value)
+        : getSprintClassesForGrade(activeJudgeGrade))
       : (selectedGroup ? selectedGroup.classes : []);
     replaceOptions(els["judge-sprint-class"], classOptions, "반 선택");
 
@@ -1164,6 +1170,20 @@
     return Array.from(classSet).sort((a, b) => toNumber(a) - toNumber(b));
   }
 
+  function getSprintGendersForGrade(grade) {
+    return Array.from(new Set((SPRINT_GROUPS[grade] || []).map(group => group.gender).filter(Boolean)));
+  }
+
+  function getSprintClassesForGender(grade, gender) {
+    const classSet = new Set();
+    (SPRINT_GROUPS[grade] || [])
+      .filter(group => group.gender === gender)
+      .forEach(group => {
+        group.classes.forEach(className => classSet.add(className));
+      });
+    return Array.from(classSet).sort((a, b) => toNumber(a) - toNumber(b));
+  }
+
   function calculateSprintScore(rule) {
     const entry = getSprintEntry(rule);
     return {
@@ -1180,14 +1200,18 @@
     if (!className) return null;
 
     if (entryType === "best") {
+      const isSprintBest = els["judge-event"].value === "단거리 달리기";
+      const gender = isSprintBest ? els["judge-sprint-group"].value : "";
+      if (isSprintBest && !gender) return null;
+
       return {
         event: els["judge-event"].value,
         grade: activeJudgeGrade,
         class: className,
         recordType: "기록 최우수",
         rank: "",
-        recordValue: "전체",
-        recordLabel: `전체 기록 최우수 +${rule.bonus}점`,
+        recordValue: gender ? `${gender} 전체` : "전체",
+        recordLabel: gender ? `${gender} 기록 최우수 +${rule.bonus}점` : `전체 기록 최우수 +${rule.bonus}점`,
         bonus: true,
         score: Number(rule.bonus || 0),
       };
